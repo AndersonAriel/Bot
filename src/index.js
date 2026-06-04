@@ -122,6 +122,145 @@ function buildMenuEmbed() {
     .setFooter({ text: "Servidor ATM 11 Brasil" });
 }
 
+
+function baseEmbed(title, description, color = 0x8a2be2) {
+  return new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(color)
+    .setFooter({ text: "Nice Craft • ATM 11 Brasil" })
+    .setTimestamp();
+}
+
+function buildIpEmbed() {
+  return baseEmbed(
+    "🌐 IP do Servidor ATM 11",
+    [
+      "**Servidor brasileiro de All The Mods 11!**",
+      "",
+      "📌 **IP:** `niceatm11.jogar.io`",
+      "",
+      "Entre, chame seus amigos e bora evoluir juntos! 🚀"
+    ].join("\n"),
+    0x00bfff
+  );
+}
+
+function buildDiscordEmbed() {
+  return baseEmbed(
+    "💬 Discord do Servidor",
+    [
+      "Entre no nosso Discord para avisos, suporte, eventos e novidades:",
+      "",
+      "🔗 https://discord.gg/bZQsTfyCUt"
+    ].join("\n"),
+    0x5865f2
+  );
+}
+
+function buildRegrasEmbed() {
+  return baseEmbed(
+    "📜 Regras do Servidor",
+    [
+      "✅ Respeite todos os jogadores e a Staff.",
+      "❌ Proibido dupe, abuso de bug, roubo, grief e tentativa de burlar sistemas.",
+      "❌ Sem homofobia, racismo, preconceito, ameaças, conteúdo pesado ou brigas no chat.",
+      "⚙️ Use farms e máquinas com responsabilidade para não causar lag.",
+      "🛒 Não tente burlar loja, VIPs, pontos ou recompensas.",
+      "",
+      "⚠️ Punições podem ser: **advertência**, **ban temporário** ou **ban permanente**, dependendo da gravidade."
+    ].join("\n"),
+    0xffcc00
+  );
+}
+
+function buildVipEmbed() {
+  return baseEmbed(
+    "🏷️ Sistema de VIPs",
+    [
+      "Os VIPs ajudam o servidor e recebem benefícios extras mantendo o equilíbrio da gameplay.",
+      "",
+      "⚒️ **VIP Ferro** — Doações de **R$5 a R$10**",
+      "🟡 **VIP Ouro** — Doações de **R$11 a R$20**",
+      "💎 **VIP Diamante** — Doações de **R$21 a R$30**",
+      "🔥 **VIP Netherita** — Doações de **R$31 a R$50**",
+      "",
+      "Benefícios incluem:",
+      "🧱 Mais chunks de claim",
+      "⚡ Mais force load",
+      "🏠 Mais homes",
+      "⏳ Cooldowns menores",
+      "🎁 Mais pontos por recompensa online",
+      "✨ Prefixo especial no nome"
+    ].join("\n"),
+    0xff9900
+  );
+}
+
+function buildKitsEmbed() {
+  return baseEmbed(
+    "🛒 Kits da Loja ATM 11",
+    [
+      "**Kits iniciais:**",
+      "🍖 Comida — `1 ponto`",
+      "⛏️ Mineração Ferro — `2 pontos`",
+      "💎 Mineração Diamante — `4 pontos`",
+      "🛠️ Mineração Netherita — `8 pontos`",
+      "🧪 Poção — `2 pontos`",
+      "",
+      "**Tecnologia e utilidades:**",
+      "💠 AE2 Básico — `5 pontos`",
+      "🌌 AE2 Avançado — `30 pontos`",
+      "🧭 Waystones — `2 pontos`",
+      "🎒 Mochila Ferro — `2 pontos`",
+      "🎒 Mochila Diamante — `8 pontos`",
+      "📦 Sophisticated Storage — `10 pontos`",
+      "🌀 Dimensional Storage — `10 pontos`",
+      "🏘️ Easy Villagers — `6 pontos`",
+      "🏘️ Easy Villagers Premium — `15 pontos`",
+      "",
+      "**Avançados:**",
+      "🏗️ Building Gadgets — `10 pontos`",
+      "⚡ Powah Niotic — `15 pontos`",
+      "⚡ Powah Nitro — `30 pontos`",
+      "💾 Refined Storage Básico — `20 pontos`",
+      "💾 Refined Storage Avançado — `30 pontos`",
+      "🌱 Mystical Agriculture — `20 pontos`",
+      "",
+      "**AllTheModium:**",
+      "✨ AllTheModium Ferramentas — `20 pontos`",
+      "🛡️ AllTheModium Armadura — `30 pontos`",
+      "💜 Vibranium Ferramentas — `25 pontos`",
+      "🛡️ Vibranium Armadura — `35 pontos`",
+      "🌌 Unobtainium Ferramentas — `30 pontos`",
+      "🛡️ Unobtainium Armadura — `40 pontos`",
+      "",
+      "A loja fica no **spawn** e o acesso é pela **placa da loja**."
+    ].join("\n"),
+    0x22cc66
+  );
+}
+
+function buildEventoEmbed() {
+  const eventoTitulo = process.env.EVENTO_TITULO || "🎉 Evento valendo VIP";
+  const eventoTexto = process.env.EVENTO_TEXTO || "No próximo final de semana teremos evento valendo VIP. O formato ainda será anunciado, mas a ideia é fazer algo divertido, justo e bem legal para todos participarem.";
+  const eventoPremio = process.env.EVENTO_PREMIO || "VIP para o vencedor";
+  const eventoData = process.env.EVENTO_DATA || "Final de semana";
+
+  return baseEmbed(
+    eventoTitulo,
+    [
+      `📅 **Data:** ${eventoData}`,
+      `🎁 **Prêmio:** ${eventoPremio}`,
+      "",
+      eventoTexto,
+      "",
+      "Fique ligado nos avisos do Discord!"
+    ].join("\n"),
+    0xff00aa
+  );
+}
+
 function buildRankingEmbed(rankKey, rows) {
   const rank = ranks[rankKey];
 
@@ -161,6 +300,36 @@ client.on("messageCreate", async (message) => {
 
   if (content === `${PREFIX}ping`) {
     await message.reply("🏓 Pong!");
+    return;
+  }
+
+  if (content === `${PREFIX}ip`) {
+    await message.reply({ embeds: [buildIpEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}discord`) {
+    await message.reply({ embeds: [buildDiscordEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}regras`) {
+    await message.reply({ embeds: [buildRegrasEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}vip`) {
+    await message.reply({ embeds: [buildVipEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}kits`) {
+    await message.reply({ embeds: [buildKitsEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}evento`) {
+    await message.reply({ embeds: [buildEventoEmbed()] });
     return;
   }
 
