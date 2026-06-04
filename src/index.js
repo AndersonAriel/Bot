@@ -2,6 +2,8 @@ require("dotenv").config();
 
 const { Client, GatewayIntentBits, EmbedBuilder } = require("discord.js");
 const { Rcon } = require("rcon-client");
+const fs = require("fs");
+const path = require("path");
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID || "";
@@ -11,6 +13,17 @@ const TOP_LIMIT = Number(process.env.TOP_LIMIT || 10);
 const RCON_HOST = process.env.RCON_HOST;
 const RCON_PORT = Number(process.env.RCON_PORT || 25575);
 const RCON_PASSWORD = process.env.RCON_PASSWORD;
+
+const DATA_DIR = path.join(process.cwd(), "data");
+const EVENT_FILE = path.join(DATA_DIR, "evento.json");
+
+const defaultEvent = {
+  titulo: process.env.EVENTO_TITULO || "🎉 Evento valendo VIP",
+  data: process.env.EVENTO_DATA || "Final de semana",
+  premio: process.env.EVENTO_PREMIO || "VIP para o vencedor",
+  texto: process.env.EVENTO_TEXTO || "No próximo final de semana teremos evento valendo VIP. O formato ainda será anunciado, mas a ideia é fazer algo divertido, justo e bem legal para todos participarem."
+};
+
 
 if (!TOKEN) {
   console.error("ERRO: DISCORD_TOKEN não configurado.");
@@ -276,19 +289,69 @@ function buildKitsEmbed() {
   );
 }
 
+
+function ensureDataDir() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
+
+function loadEvento() {
+  ensureDataDir();
+
+  if (!fs.existsSync(EVENT_FILE)) {
+    saveEvento(defaultEvent);
+    return { ...defaultEvent };
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(EVENT_FILE, "utf8"));
+    return {
+      titulo: data.titulo || defaultEvent.titulo,
+      data: data.data || defaultEvent.data,
+      premio: data.premio || defaultEvent.premio,
+      texto: data.texto || defaultEvent.texto
+    };
+  } catch {
+    saveEvento(defaultEvent);
+    return { ...defaultEvent };
+  }
+}
+
+function saveEvento(evento) {
+  ensureDataDir();
+  fs.writeFileSync(EVENT_FILE, JSON.stringify(evento, null, 2), "utf8");
+}
+
+function hasEventPermission(message) {
+  return message.member?.permissions?.has("ManageGuild") || message.member?.permissions?.has("Administrator");
+}
+
+function parseSetEvento(rawText) {
+  const parts = rawText.split("|").map((part) => part.trim());
+
+  if (parts.length < 4) {
+    return null;
+  }
+
+  return {
+    titulo: parts[0],
+    data: parts[1],
+    premio: parts[2],
+    texto: parts.slice(3).join(" | ")
+  };
+}
+
 function buildEventoEmbed() {
-  const eventoTitulo = process.env.EVENTO_TITULO || "🎉 Evento valendo VIP";
-  const eventoTexto = process.env.EVENTO_TEXTO || "No próximo final de semana teremos evento valendo VIP. O formato ainda será anunciado, mas a ideia é fazer algo divertido, justo e bem legal para todos participarem.";
-  const eventoPremio = process.env.EVENTO_PREMIO || "VIP para o vencedor";
-  const eventoData = process.env.EVENTO_DATA || "Final de semana";
+  const evento = loadEvento();
 
   return baseEmbed(
-    eventoTitulo,
+    evento.titulo,
     [
-      `📅 **Data:** ${eventoData}`,
-      `🎁 **Prêmio:** ${eventoPremio}`,
+      `📅 **Data:** ${evento.data}`,
+      `🎁 **Prêmio:** ${evento.premio}`,
       "",
-      eventoTexto,
+      evento.texto,
       "",
       "Fique ligado nos avisos do Discord!"
     ].join("\n"),
@@ -467,6 +530,33 @@ client.on("messageCreate", async (message) => {
 
   if (content === `${PREFIX}evento`) {
     await message.reply({ embeds: [buildEventoEmbed()] });
+    return;
+  }
+
+  if (content.startsWith(`${PREFIX}setevento`)) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para alterar o evento. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const rawEvento = content.slice(`${PREFIX}setevento`.length).trim();
+    const evento = parseSetEvento(rawEvento);
+
+    if (!evento) {
+      await message.reply([
+        "❌ Formato incorreto.",
+        "",
+        "Use assim:",
+        `\`${PREFIX}setevento Título | Data | Prêmio | Texto do evento\``,
+        "",
+        "Exemplo:",
+        `\`${PREFIX}setevento 🎉 Evento valendo VIP | Sábado 20h | VIP Ferro | Corrida no spawn valendo VIP para o vencedor\``
+      ].join("\n"));
+      return;
+    }
+
+    saveEvento(evento);
+    await message.reply({ content: "✅ Evento atualizado com sucesso!", embeds: [buildEventoEmbed()] });
     return;
   }
 

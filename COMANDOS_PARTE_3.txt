@@ -1,0 +1,21 @@
+Comandos adicionados na Parte 3:
+
+!evento
+Mostra o evento atual configurado.
+
+!setevento Título | Data | Prêmio | Texto do evento
+Altera o evento atual pelo Discord.
+
+Exemplo:
+!setevento 🎉 Evento valendo VIP | Sábado 20h | VIP Ferro | Corrida no spawn valendo VIP para o vencedor
+
+Segurança:
+- Somente pessoas com permissão Gerenciar Servidor ou Administrador conseguem usar !setevento.
+- Jogadores comuns só conseguem usar !evento.
+- Nenhum comando de admin do Minecraft foi liberado.
+- Nenhum datapack foi alterado.
+- Nenhum ranking foi alterado.
+
+Observação:
+O evento fica salvo no arquivo data/evento.json dentro do bot.
+Se o Railway redeployar do zero, ele pode voltar para o evento salvo no GitHub.
