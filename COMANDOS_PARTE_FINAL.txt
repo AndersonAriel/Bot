@@ -1,0 +1,32 @@
+Comandos adicionados na Parte Final:
+
+!comandos ou !ajuda
+Mostra todos os comandos principais do bot.
+
+!sorteio
+Mostra o sorteio ativo.
+
+!participar
+Participa do sorteio ativo.
+
+!criarsorteio Título | Prêmio | Data | Texto do sorteio
+Cria um sorteio novo.
+
+Exemplo:
+!criarsorteio 🎁 Sorteio valendo VIP | VIP Ferro | Domingo 20h | Clique em participar para concorrer ao VIP
+
+!sortear
+Sorteia um vencedor entre os participantes.
+
+!cancelarsorteio
+Cancela o sorteio ativo.
+
+Segurança:
+- !criarsorteio, !sortear e !cancelarsorteio exigem permissão Gerenciar Servidor ou Administrador.
+- Jogadores comuns só conseguem usar !sorteio e !participar.
+- Nenhum comando de admin do Minecraft foi liberado.
+- Nenhum datapack foi alterado.
+- Nenhum ranking foi alterado.
+
+Observação:
+O sorteio fica salvo no arquivo data/sorteio.json dentro do bot.

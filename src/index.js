@@ -16,6 +16,7 @@ const RCON_PASSWORD = process.env.RCON_PASSWORD;
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const EVENT_FILE = path.join(DATA_DIR, "evento.json");
+const GIVEAWAY_FILE = path.join(DATA_DIR, "sorteio.json");
 
 const defaultEvent = {
   titulo: process.env.EVENTO_TITULO || "🎉 Evento valendo VIP",
@@ -479,6 +480,197 @@ function buildUptimeEmbed() {
   );
 }
 
+
+function defaultSorteio() {
+  return {
+    ativo: false,
+    titulo: "🎁 Sorteio valendo VIP",
+    premio: "VIP Ferro",
+    data: "Em breve",
+    texto: "Participe do sorteio do servidor ATM 11!",
+    participantes: []
+  };
+}
+
+function loadSorteio() {
+  ensureDataDir();
+
+  if (!fs.existsSync(GIVEAWAY_FILE)) {
+    const sorteio = defaultSorteio();
+    saveSorteio(sorteio);
+    return sorteio;
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(GIVEAWAY_FILE, "utf8"));
+    return {
+      ativo: Boolean(data.ativo),
+      titulo: data.titulo || "🎁 Sorteio valendo VIP",
+      premio: data.premio || "VIP Ferro",
+      data: data.data || "Em breve",
+      texto: data.texto || "Participe do sorteio do servidor ATM 11!",
+      participantes: Array.isArray(data.participantes) ? data.participantes : []
+    };
+  } catch {
+    const sorteio = defaultSorteio();
+    saveSorteio(sorteio);
+    return sorteio;
+  }
+}
+
+function saveSorteio(sorteio) {
+  ensureDataDir();
+  fs.writeFileSync(GIVEAWAY_FILE, JSON.stringify(sorteio, null, 2), "utf8");
+}
+
+function parseCriarSorteio(rawText) {
+  const parts = rawText.split("|").map((part) => part.trim());
+
+  if (parts.length < 4) {
+    return null;
+  }
+
+  return {
+    ativo: true,
+    titulo: parts[0],
+    premio: parts[1],
+    data: parts[2],
+    texto: parts.slice(3).join(" | "),
+    participantes: []
+  };
+}
+
+function buildSorteioEmbed() {
+  const sorteio = loadSorteio();
+
+  if (!sorteio.ativo) {
+    return baseEmbed(
+      "🎁 Sorteio",
+      [
+        "No momento não existe sorteio ativo.",
+        "",
+        "Quando a Staff criar um sorteio, ele aparecerá aqui.",
+        "",
+        "Comando para participar quando tiver sorteio:",
+        `\`${PREFIX}participar\``
+      ].join("\n"),
+      0xffcc00
+    );
+  }
+
+  return baseEmbed(
+    sorteio.titulo,
+    [
+      `🎁 **Prêmio:** ${sorteio.premio}`,
+      `📅 **Data:** ${sorteio.data}`,
+      `👥 **Participantes:** ${sorteio.participantes.length}`,
+      "",
+      sorteio.texto,
+      "",
+      `Para participar, digite: \`${PREFIX}participar\``
+    ].join("\n"),
+    0xff00aa
+  );
+}
+
+function addParticipante(message) {
+  const sorteio = loadSorteio();
+
+  if (!sorteio.ativo) {
+    return {
+      ok: false,
+      message: "❌ Não existe sorteio ativo no momento."
+    };
+  }
+
+  const userId = message.author.id;
+
+  if (sorteio.participantes.includes(userId)) {
+    return {
+      ok: false,
+      message: "⚠️ Você já está participando deste sorteio."
+    };
+  }
+
+  sorteio.participantes.push(userId);
+  saveSorteio(sorteio);
+
+  return {
+    ok: true,
+    message: `✅ ${message.author} entrou no sorteio **${sorteio.titulo}**!`
+  };
+}
+
+function pickWinner() {
+  const sorteio = loadSorteio();
+
+  if (!sorteio.ativo) {
+    return {
+      ok: false,
+      message: "❌ Não existe sorteio ativo para sortear."
+    };
+  }
+
+  if (!sorteio.participantes.length) {
+    return {
+      ok: false,
+      message: "❌ Não há participantes no sorteio."
+    };
+  }
+
+  const winnerId = sorteio.participantes[Math.floor(Math.random() * sorteio.participantes.length)];
+  const result = {
+    ok: true,
+    winnerId,
+    titulo: sorteio.titulo,
+    premio: sorteio.premio,
+    participantes: sorteio.participantes.length
+  };
+
+  sorteio.ativo = false;
+  saveSorteio(sorteio);
+
+  return result;
+}
+
+function buildComandosEmbed() {
+  return baseEmbed(
+    "🤖 Comandos do Bot ATM 11",
+    [
+      "**Informações:**",
+      `\`${PREFIX}ip\` — IP do servidor`,
+      `\`${PREFIX}discord\` — link do Discord`,
+      `\`${PREFIX}regras\` — regras do servidor`,
+      `\`${PREFIX}vip\` — benefícios dos VIPs`,
+      `\`${PREFIX}kits\` — kits da loja`,
+      "",
+      "**Servidor:**",
+      `\`${PREFIX}status\` — status do servidor`,
+      `\`${PREFIX}online\` — jogadores online`,
+      `\`${PREFIX}uptime\` — uptime do bot`,
+      "",
+      "**Eventos e sorteios:**",
+      `\`${PREFIX}evento\` — evento atual`,
+      `\`${PREFIX}sorteio\` — sorteio atual`,
+      `\`${PREFIX}participar\` — participar do sorteio ativo`,
+      "",
+      "**Rankings:**",
+      `\`${PREFIX}rank\` — menu de rankings`,
+      `\`${PREFIX}rank mobs\``,
+      `\`${PREFIX}rank mortes\``,
+      `\`${PREFIX}rank minerios\``,
+      `\`${PREFIX}rank tempo\``,
+      "",
+      "**Staff:**",
+      `\`${PREFIX}setevento Título | Data | Prêmio | Texto\``,
+      `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto\``,
+      `\`${PREFIX}sortear\``,
+      `\`${PREFIX}cancelarsorteio\``
+    ].join("\n"),
+    0x8a2be2
+  );
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -586,6 +778,93 @@ client.on("messageCreate", async (message) => {
 
   if (content === `${PREFIX}uptime`) {
     await message.reply({ embeds: [buildUptimeEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}comandos` || content === `${PREFIX}ajuda`) {
+    await message.reply({ embeds: [buildComandosEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}sorteio`) {
+    await message.reply({ embeds: [buildSorteioEmbed()] });
+    return;
+  }
+
+  if (content.startsWith(`${PREFIX}criarsorteio`)) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para criar sorteio. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const rawSorteio = content.slice(`${PREFIX}criarsorteio`.length).trim();
+    const sorteio = parseCriarSorteio(rawSorteio);
+
+    if (!sorteio) {
+      await message.reply([
+        "❌ Formato incorreto.",
+        "",
+        "Use assim:",
+        `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto do sorteio\``,
+        "",
+        "Exemplo:",
+        `\`${PREFIX}criarsorteio 🎁 Sorteio valendo VIP | VIP Ferro | Domingo 20h | Clique em participar para concorrer ao VIP\``
+      ].join("\n"));
+      return;
+    }
+
+    saveSorteio(sorteio);
+    await message.reply({ content: "✅ Sorteio criado com sucesso!", embeds: [buildSorteioEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}participar`) {
+    const result = addParticipante(message);
+    await message.reply(result.message);
+    return;
+  }
+
+  if (content === `${PREFIX}sortear`) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para sortear. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const result = pickWinner();
+
+    if (!result.ok) {
+      await message.reply(result.message);
+      return;
+    }
+
+    await message.reply([
+      "🎉 **SORTEIO FINALIZADO!** 🎉",
+      "",
+      `🏆 Vencedor: <@${result.winnerId}>`,
+      `🎁 Prêmio: **${result.premio}**`,
+      `👥 Participantes: **${result.participantes}**`,
+      "",
+      "Parabéns ao vencedor! 🚀"
+    ].join("\n"));
+    return;
+  }
+
+  if (content === `${PREFIX}cancelarsorteio`) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para cancelar sorteio. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const sorteio = loadSorteio();
+
+    if (!sorteio.ativo) {
+      await message.reply("⚠️ Não existe sorteio ativo para cancelar.");
+      return;
+    }
+
+    sorteio.ativo = false;
+    saveSorteio(sorteio);
+    await message.reply("✅ Sorteio cancelado com sucesso.");
     return;
   }
 
