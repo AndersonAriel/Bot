@@ -1,0 +1,17 @@
+Alteração feita:
+
+Somente o texto do comando !vip foi alterado.
+
+Agora o !vip mostra cada VIP individualmente com:
+- faixa de doação
+- claims
+- force load
+- quantidade de homes
+- cooldown de home
+- limite/cooldown de Waystones
+- /back
+- /spawn
+- /rtp
+- pontos de recompensa a cada 5 horas online
+
+Nenhum outro comando foi alterado.

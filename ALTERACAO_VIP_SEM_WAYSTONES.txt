@@ -1,0 +1,10 @@
+Alteração feita:
+
+Removido do comando !vip:
+- Waystones
+- Cooldown de Waystone
+
+Motivo:
+O servidor não possui esse benefício configurado.
+
+Nenhum outro comando foi alterado.
