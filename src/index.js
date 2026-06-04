@@ -314,6 +314,108 @@ function buildRankingEmbed(rankKey, rows) {
     .setTimestamp();
 }
 
+
+function parseListOutput(output) {
+  const text = String(output || "").trim();
+
+  // Formato comum: "There are 2 of a max of 20 players online: A, B"
+  const match = text.match(/There are\s+(\d+)\s+of a max of\s+(\d+)\s+players online(?::\s*(.*))?/i);
+
+  if (!match) {
+    return {
+      online: 0,
+      max: 0,
+      players: [],
+      raw: text
+    };
+  }
+
+  const online = Number(match[1] || 0);
+  const max = Number(match[2] || 0);
+  const playersText = (match[3] || "").trim();
+
+  const players = playersText
+    ? playersText.split(",").map((p) => p.trim()).filter(Boolean)
+    : [];
+
+  return { online, max, players, raw: text };
+}
+
+function formatDuration(seconds) {
+  const total = Math.floor(Number(seconds) || 0);
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+
+  const parts = [];
+  if (days) parts.push(`${days}d`);
+  if (hours) parts.push(`${hours}h`);
+  if (minutes) parts.push(`${minutes}m`);
+  if (!parts.length) parts.push(`${secs}s`);
+
+  return parts.join(" ");
+}
+
+async function getServerListInfo() {
+  return await withRcon(async (rcon) => {
+    const output = await rcon.send("list");
+    return parseListOutput(output);
+  });
+}
+
+async function buildStatusEmbed() {
+  const info = await getServerListInfo();
+
+  return baseEmbed(
+    "🌐 Status do Servidor ATM 11",
+    [
+      "✅ **Servidor online**",
+      "",
+      `📌 **IP:** \`niceatm11.jogar.io\``,
+      `👥 **Jogadores:** \`${info.online}/${info.max}\``,
+      "",
+      info.players.length
+        ? `🟢 **Online agora:**\n${info.players.map((p) => `• ${p}`).join("\n")}`
+        : "🟡 **Online agora:** nenhum jogador online.",
+      "",
+      "⚙️ Modpack: **All The Mods 11**"
+    ].join("\n"),
+    0x22cc66
+  );
+}
+
+async function buildOnlineEmbed() {
+  const info = await getServerListInfo();
+
+  return baseEmbed(
+    "👥 Jogadores Online",
+    [
+      `Atualmente temos **${info.online}/${info.max}** jogadores online.`,
+      "",
+      info.players.length
+        ? info.players.map((p, index) => `**${index + 1}.** ${p}`).join("\n")
+        : "Nenhum jogador online no momento."
+    ].join("\n"),
+    0x00bfff
+  );
+}
+
+function buildUptimeEmbed() {
+  return baseEmbed(
+    "⏱️ Uptime do Bot",
+    [
+      "Este comando mostra há quanto tempo o **bot de rankings** está online no Railway.",
+      "",
+      `🤖 **Bot online há:** \`${formatDuration(process.uptime())}\``,
+      "",
+      "Para confirmar o servidor Minecraft, use:",
+      `\`${PREFIX}status\``
+    ].join("\n"),
+    0xffcc00
+  );
+}
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -365,6 +467,35 @@ client.on("messageCreate", async (message) => {
 
   if (content === `${PREFIX}evento`) {
     await message.reply({ embeds: [buildEventoEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}status`) {
+    const loading = await message.reply("🔎 Consultando status do servidor...");
+    try {
+      const embed = await buildStatusEmbed();
+      await loading.edit({ content: "", embeds: [embed] });
+    } catch (error) {
+      console.error(error);
+      await loading.edit("❌ Não consegui consultar o servidor. Confira RCON_HOST, RCON_PORT e RCON_PASSWORD no Railway.");
+    }
+    return;
+  }
+
+  if (content === `${PREFIX}online`) {
+    const loading = await message.reply("🔎 Consultando jogadores online...");
+    try {
+      const embed = await buildOnlineEmbed();
+      await loading.edit({ content: "", embeds: [embed] });
+    } catch (error) {
+      console.error(error);
+      await loading.edit("❌ Não consegui consultar os jogadores online. Confira se o RCON está ativo.");
+    }
+    return;
+  }
+
+  if (content === `${PREFIX}uptime`) {
+    await message.reply({ embeds: [buildUptimeEmbed()] });
     return;
   }
 

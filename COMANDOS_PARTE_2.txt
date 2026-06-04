@@ -1,0 +1,20 @@
+Comandos adicionados na Parte 2:
+
+!status
+Mostra se o servidor está online via RCON, IP e quantidade de jogadores.
+
+!online
+Mostra lista de jogadores online no servidor.
+
+!uptime
+Mostra há quanto tempo o bot está online no Railway.
+
+Observação:
+!status e !online dependem do RCON configurado corretamente no Railway:
+RCON_HOST
+RCON_PORT
+RCON_PASSWORD
+
+Nenhum comando de admin foi liberado.
+Nenhum datapack foi alterado.
+Nenhum comando da Parte 1 foi alterado.
