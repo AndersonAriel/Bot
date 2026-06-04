@@ -19,6 +19,7 @@ const EVENT_FILE = path.join(DATA_DIR, "evento.json");
 const GIVEAWAY_FILE = path.join(DATA_DIR, "sorteio.json");
 
 const defaultEvent = {
+  ativo: true,
   titulo: process.env.EVENTO_TITULO || "🎉 Evento valendo VIP",
   data: process.env.EVENTO_DATA || "Final de semana",
   premio: process.env.EVENTO_PREMIO || "VIP para o vencedor",
@@ -308,6 +309,7 @@ function loadEvento() {
   try {
     const data = JSON.parse(fs.readFileSync(EVENT_FILE, "utf8"));
     return {
+      ativo: data.ativo !== false,
       titulo: data.titulo || defaultEvent.titulo,
       data: data.data || defaultEvent.data,
       premio: data.premio || defaultEvent.premio,
@@ -336,6 +338,7 @@ function parseSetEvento(rawText) {
   }
 
   return {
+    ativo: true,
     titulo: parts[0],
     data: parts[1],
     premio: parts[2],
@@ -345,6 +348,18 @@ function parseSetEvento(rawText) {
 
 function buildEventoEmbed() {
   const evento = loadEvento();
+
+  if (!evento.ativo) {
+    return baseEmbed(
+      "🎉 Evento",
+      [
+        "No momento não existe evento ativo.",
+        "",
+        "Quando a Staff criar um novo evento, ele aparecerá aqui."
+      ].join("\n"),
+      0xffcc00
+    );
+  }
 
   return baseEmbed(
     evento.titulo,
@@ -405,21 +420,6 @@ function parseListOutput(output) {
   return { online, max, players, raw: text };
 }
 
-function formatDuration(seconds) {
-  const total = Math.floor(Number(seconds) || 0);
-  const days = Math.floor(total / 86400);
-  const hours = Math.floor((total % 86400) / 3600);
-  const minutes = Math.floor((total % 3600) / 60);
-  const secs = total % 60;
-
-  const parts = [];
-  if (days) parts.push(`${days}d`);
-  if (hours) parts.push(`${hours}h`);
-  if (minutes) parts.push(`${minutes}m`);
-  if (!parts.length) parts.push(`${secs}s`);
-
-  return parts.join(" ");
-}
 
 async function getServerListInfo() {
   return await withRcon(async (rcon) => {
@@ -465,20 +465,6 @@ async function buildOnlineEmbed() {
   );
 }
 
-function buildUptimeEmbed() {
-  return baseEmbed(
-    "⏱️ Uptime do Bot",
-    [
-      "Este comando mostra há quanto tempo o **bot de rankings** está online no Railway.",
-      "",
-      `🤖 **Bot online há:** \`${formatDuration(process.uptime())}\``,
-      "",
-      "Para confirmar o servidor Minecraft, use:",
-      `\`${PREFIX}status\``
-    ].join("\n"),
-    0xffcc00
-  );
-}
 
 
 function defaultSorteio() {
@@ -647,7 +633,6 @@ function buildComandosEmbed() {
       "**Servidor:**",
       `\`${PREFIX}status\` — status do servidor`,
       `\`${PREFIX}online\` — jogadores online`,
-      `\`${PREFIX}uptime\` — uptime do bot`,
       "",
       "**Eventos e sorteios:**",
       `\`${PREFIX}evento\` — evento atual`,
@@ -663,6 +648,7 @@ function buildComandosEmbed() {
       "",
       "**Staff:**",
       `\`${PREFIX}setevento Título | Data | Prêmio | Texto\``,
+      `\`${PREFIX}removerevento\``,
       `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto\``,
       `\`${PREFIX}sortear\``,
       `\`${PREFIX}cancelarsorteio\``
@@ -752,6 +738,25 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  if (content === `${PREFIX}removerevento`) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para remover o evento. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const evento = loadEvento();
+
+    if (!evento.ativo) {
+      await message.reply("⚠️ Não existe evento ativo para remover.");
+      return;
+    }
+
+    evento.ativo = false;
+    saveEvento(evento);
+    await message.reply({ content: "✅ Evento removido com sucesso.", embeds: [buildEventoEmbed()] });
+    return;
+  }
+
   if (content === `${PREFIX}status`) {
     const loading = await message.reply("🔎 Consultando status do servidor...");
     try {
@@ -773,11 +778,6 @@ client.on("messageCreate", async (message) => {
       console.error(error);
       await loading.edit("❌ Não consegui consultar os jogadores online. Confira se o RCON está ativo.");
     }
-    return;
-  }
-
-  if (content === `${PREFIX}uptime`) {
-    await message.reply({ embeds: [buildUptimeEmbed()] });
     return;
   }
 

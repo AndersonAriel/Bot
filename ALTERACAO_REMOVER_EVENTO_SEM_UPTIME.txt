@@ -1,0 +1,26 @@
+Alteração feita:
+
+1. Adicionado comando:
+!removerevento
+
+Função:
+Remove/desativa o evento criado atualmente.
+Depois disso, o comando !evento mostra que não existe evento ativo.
+
+Segurança:
+!removerevento só funciona para quem tem permissão Gerenciar Servidor ou Administrador.
+
+2. Removido comando:
+!uptime
+
+Também removido do menu !comandos/!ajuda.
+
+Arquivos alterados/adicionados:
+- src/index.js
+- data/evento.json
+- COMANDOS_PARTE_2.txt
+- COMANDOS_PARTE_3.txt
+- COMANDOS_PARTE_FINAL.txt
+- ALTERACAO_REMOVER_EVENTO_SEM_UPTIME.txt
+
+Nenhum ranking, RCON, datapack, VIP, sorteio ou status foi alterado.

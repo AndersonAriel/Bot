@@ -2,5 +2,6 @@
   "titulo": "🎉 Evento valendo VIP",
   "data": "Final de semana",
   "premio": "VIP para o vencedor",
-  "texto": "No próximo final de semana teremos evento valendo VIP. O formato ainda será anunciado, mas a ideia é fazer algo divertido, justo e bem legal para todos participarem."
+  "texto": "No próximo final de semana teremos evento valendo VIP. O formato ainda será anunciado, mas a ideia é fazer algo divertido, justo e bem legal para todos participarem.",
+  "ativo": true
 }

@@ -30,3 +30,7 @@ Segurança:
 
 Observação:
 O sorteio fica salvo no arquivo data/sorteio.json dentro do bot.
+
+
+!removerevento
+Remove/desativa o evento atual. Exige permissão Gerenciar Servidor ou Administrador.

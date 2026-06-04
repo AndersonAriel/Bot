@@ -19,3 +19,7 @@ Segurança:
 Observação:
 O evento fica salvo no arquivo data/evento.json dentro do bot.
 Se o Railway redeployar do zero, ele pode voltar para o evento salvo no GitHub.
+
+
+!removerevento
+Remove/desativa o evento atual. Exige permissão Gerenciar Servidor ou Administrador.
