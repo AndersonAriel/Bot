@@ -1,0 +1,14 @@
+Comandos adicionados na Parte 1:
+
+!ip
+!discord
+!regras
+!vip
+!kits
+!evento
+
+O comando !evento pode ser personalizado no Railway usando:
+EVENTO_TITULO
+EVENTO_DATA
+EVENTO_PREMIO
+EVENTO_TEXTO
