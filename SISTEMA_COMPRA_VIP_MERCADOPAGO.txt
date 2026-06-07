@@ -1,0 +1,54 @@
+Sistema de Compra VIP Automática com Mercado Pago
+
+Comandos:
+!vipsetup ou !painelvip
+Cria o painel fixo de compra VIP no canal configurado.
+
+!comprarvip
+Mostra o painel de compra VIP no canal configurado.
+
+!nick NICK_DO_MINECRAFT
+Usado dentro da sala privada depois que o pagamento for aprovado.
+
+Fluxo:
+1. Player usa !comprarvip no canal VIP.
+2. Bot mostra painel com faixas de VIP.
+3. Player escolhe a faixa no menu.
+4. Bot pede o valor exato dentro da faixa.
+5. Bot cria sala privada entre bot e player.
+6. Bot gera Pix/QR Code pelo Mercado Pago.
+7. Mercado Pago chama o webhook quando aprovar.
+8. Bot pede o nick exato do Minecraft.
+9. Player usa !nick SeuNick.
+10. Bot entrega o VIP via RCON, dá pontos e anuncia no servidor.
+
+Faixas:
+R$5 a R$10 = VIP Ferro
+R$11 a R$20 = VIP Ouro
+R$21 a R$30 = VIP Diamante
+R$31 ou mais = VIP Netherita
+
+Pontos:
+1 real = 1 ponto de doação.
+Exemplos: R$8 = 8 pontos, R$100 = 100 pontos.
+
+Comandos RCON executados:
+ftbranks add NICK vip1/vip2/vip3/vip4
+scoreboard players add NICK pontos_doacao PONTOS
+execute as NICK run function vip_rewards:vip/vip1/vip2/vip3/vip4
+tellraw @a anunciando novo VIP
+
+Variáveis do Railway:
+MP_ACCESS_TOKEN
+PUBLIC_URL
+VIP_PANEL_CHANNEL_ID
+VIP_CATEGORY_ID opcional
+VIP_LOG_CHANNEL_ID opcional
+VIP_STAFF_ROLE_ID opcional
+
+Webhook Mercado Pago:
+PUBLIC_URL/webhook/mercadopago
+
+Importante:
+Nunca coloque MP_ACCESS_TOKEN no GitHub.
+Coloque o token somente nas Variables do Railway.
