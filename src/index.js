@@ -604,19 +604,33 @@ function pickWinner() {
     };
   }
 
-  const winnerId = sorteio.participantes[Math.floor(Math.random() * sorteio.participantes.length)];
-  const result = {
+  const winnerIndex = Math.floor(Math.random() * sorteio.participantes.length);
+  const winnerId = sorteio.participantes[winnerIndex];
+  const totalBeforeDraw = sorteio.participantes.length;
+
+  // Remove o vencedor da lista para permitir sortear novamente
+  // caso ele não faça mais parte do servidor ou não possa receber o prêmio.
+  sorteio.participantes.splice(winnerIndex, 1);
+
+  const remainingParticipants = sorteio.participantes.length;
+
+  // O sorteio continua ativo enquanto ainda houver participantes para re-sortear.
+  // Se acabar a lista, ele é encerrado automaticamente.
+  if (remainingParticipants <= 0) {
+    sorteio.ativo = false;
+  }
+
+  saveSorteio(sorteio);
+
+  return {
     ok: true,
     winnerId,
     titulo: sorteio.titulo,
     premio: sorteio.premio,
-    participantes: sorteio.participantes.length
+    participantes: totalBeforeDraw,
+    restantes: remainingParticipants,
+    aindaAtivo: sorteio.ativo
   };
-
-  sorteio.ativo = false;
-  saveSorteio(sorteio);
-
-  return result;
 }
 
 function buildComandosEmbed() {
@@ -651,7 +665,8 @@ function buildComandosEmbed() {
       `\`${PREFIX}removerevento\``,
       `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto\``,
       `\`${PREFIX}sortear\``,
-      `\`${PREFIX}cancelarsorteio\``
+      `\`${PREFIX}cancelarsorteio\``,
+      `\`${PREFIX}finalizarsorteio\``
     ].join("\n"),
     0x8a2be2
   );
@@ -837,15 +852,26 @@ client.on("messageCreate", async (message) => {
       return;
     }
 
-    await message.reply([
-      "🎉 **SORTEIO FINALIZADO!** 🎉",
+    const lines = [
+      "🎉 **VENCEDOR SORTEADO!** 🎉",
       "",
       `🏆 Vencedor: <@${result.winnerId}>`,
       `🎁 Prêmio: **${result.premio}**`,
-      `👥 Participantes: **${result.participantes}**`,
+      `👥 Participantes no sorteio: **${result.participantes}**`,
+      `🔁 Restantes para possível novo sorteio: **${result.restantes}**`,
       "",
       "Parabéns ao vencedor! 🚀"
-    ].join("\n"));
+    ];
+
+    if (result.aindaAtivo) {
+      lines.push("");
+      lines.push("Caso o vencedor não faça mais parte do servidor ou não possa receber o prêmio, a Staff pode usar `!sortear` novamente.");
+    } else {
+      lines.push("");
+      lines.push("Não há mais participantes restantes. O sorteio foi encerrado automaticamente.");
+    }
+
+    await message.reply(lines.join("\n"));
     return;
   }
 
@@ -865,6 +891,31 @@ client.on("messageCreate", async (message) => {
     sorteio.ativo = false;
     saveSorteio(sorteio);
     await message.reply("✅ Sorteio cancelado com sucesso.");
+    return;
+  }
+
+  if (content === `${PREFIX}finalizarsorteio`) {
+    if (!hasEventPermission(message)) {
+      await message.reply("❌ Você não tem permissão para finalizar sorteio. Permissão necessária: **Gerenciar Servidor**.");
+      return;
+    }
+
+    const sorteio = loadSorteio();
+
+    if (!sorteio.ativo) {
+      await message.reply("⚠️ Não existe sorteio ativo para finalizar.");
+      return;
+    }
+
+    sorteio.ativo = false;
+    saveSorteio(sorteio);
+
+    await message.reply([
+      "✅ **Sorteio finalizado com sucesso.**",
+      "",
+      "Agora a Staff já pode criar outro sorteio usando:",
+      `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto do sorteio\``
+    ].join("\n"));
     return;
   }
 

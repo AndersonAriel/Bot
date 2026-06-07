@@ -1,0 +1,14 @@
+Alteração feita:
+
+O comando !sortear foi alterado.
+
+Antes:
+- Ao sortear um vencedor, o sorteio era finalizado automaticamente.
+
+Agora:
+- Ao sortear um vencedor, o bot remove esse vencedor da lista de participantes.
+- O sorteio continua ativo se ainda houver participantes restantes.
+- A Staff pode usar !sortear novamente caso o vencedor não faça mais parte do servidor ou não possa receber o prêmio.
+- Se não houver mais participantes restantes, o sorteio é encerrado automaticamente.
+
+Nenhum outro sistema foi alterado.

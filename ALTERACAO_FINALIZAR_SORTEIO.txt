@@ -1,0 +1,14 @@
+Alteração feita:
+
+Adicionado comando:
+!finalizarsorteio
+
+Função:
+- Finaliza o sorteio ativo.
+- Não sorteia ninguém.
+- Libera a Staff para criar outro sorteio depois.
+
+Segurança:
+- Só funciona para quem tem permissão Gerenciar Servidor ou Administrador.
+
+Nenhum outro sistema foi alterado.
