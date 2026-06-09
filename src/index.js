@@ -30,10 +30,10 @@ const VIP_LOG_CHANNEL_ID = process.env.VIP_LOG_CHANNEL_ID || "";
 const VIP_STAFF_ROLE_ID = process.env.VIP_STAFF_ROLE_ID || "";
 
 const vipRanges = [
-  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip1", rewardFunction: "vip_rewards:vip/vip1", rewardText: "2 pontos a cada 5 horas online" },
-  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip2", rewardFunction: "vip_rewards:vip/vip2", rewardText: "3 pontos a cada 5 horas online" },
-  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip3", rewardFunction: "vip_rewards:vip/vip3", rewardText: "5 pontos a cada 5 horas online" },
-  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip4", rewardFunction: "vip_rewards:vip/vip4", rewardText: "8 pontos a cada 5 horas online" }
+  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip_ferro", tag: "vip_ferro", rewardText: "2 pontos a cada 5 horas online" },
+  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip_ouro", tag: "vip_ouro", rewardText: "3 pontos a cada 5 horas online" },
+  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip_diamante", tag: "vip_diamante", rewardText: "5 pontos a cada 5 horas online" },
+  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip_netherita", tag: "vip_netherita", rewardText: "8 pontos a cada 5 horas online" }
 ];
 
 
@@ -761,9 +761,9 @@ function createVipPanelEmbed() {
   return baseEmbed(
     "💎 Loja VIP ATM 11",
     [
-      "Escolha abaixo a faixa de VIP que deseja comprar/apoiar.",
+      "Escolha abaixo a faixa de VIP que deseja comprar ou apoiar.",
       "",
-      "Depois da escolha, o bot abrirá uma sala privada e vai gerar o Pix/QR Code pelo Mercado Pago.",
+      "Depois da escolha, o bot vai abrir um **ticket privado de compra** e gerar o **Pix / QR Code** automaticamente pelo Mercado Pago.",
       "",
       "**Faixas disponíveis:**",
       "⚒️ **VIP Ferro** — Doação de **R$5 a R$10**",
@@ -772,7 +772,8 @@ function createVipPanelEmbed() {
       "🔥 **VIP Netherita** — Doação de **R$31 ou mais**",
       "",
       "📌 **Cada R$1 doado = 1 ponto de doação.**",
-      "Após o pagamento aprovado, você enviará seu nick exato do Minecraft para receber o VIP automaticamente."
+      "✅ Após o pagamento aprovado, você envia o nick exato do Minecraft e o bot entrega o VIP automaticamente.",
+      "🗑️ Quando a compra terminar, o ticket poderá ser fechado pelo botão."
     ].join("\n"),
     0xff9900
   );
@@ -807,10 +808,190 @@ function createVipAmountModal(vip) {
   return modal;
 }
 
+
+function createVipTicketIntroEmbed(user, vip, amount) {
+  return baseEmbed(
+    `🧾 Ticket de compra • ${vip.name}`,
+    [
+      `Olá ${user}!`,
+      "",
+      "Seu ticket privado foi criado com sucesso.",
+      "Toda a compra será feita por aqui, com confirmação automática.",
+      "",
+      "**Resumo da compra:**",
+      `• VIP escolhido: **${vip.name}**`,
+      `• Valor escolhido: **${formatMoney(amount)}**`,
+      `• Pontos de doação: **${Math.floor(amount)}**`,
+      `• Recompensa online: **${vip.rewardText}**`,
+      "",
+      "⏳ Aguarde um instante enquanto gero o Pix / QR Code do Mercado Pago..."
+    ].join("\n"),
+    0xffb347
+  );
+}
+
+function createVipPixGeneratedEmbed(vip, amount, qrCode) {
+  return baseEmbed(
+    "✅ Pix gerado com sucesso!",
+    [
+      "Seu pagamento foi criado e já está pronto para ser feito.",
+      "",
+      `**VIP:** ${vip.name}`,
+      `**Valor:** ${formatMoney(amount)}`,
+      `**Pontos de doação:** ${Math.floor(amount)}`,
+      "",
+      "📷 Escaneie o QR Code abaixo ou use o Pix copia e cola.",
+      "",
+      qrCode ? `**Pix copia e cola:**\n\`\`\`\n${qrCode}\n\`\`\`` : "Pix copia e cola não retornou. Use o QR Code, se aparecer.",
+      "",
+      "Assim que o pagamento for aprovado, eu vou liberar a próxima etapa automaticamente."
+    ].join("\n"),
+    0x2ecc71
+  );
+}
+
+function createVipApprovedEmbed(compra) {
+  return baseEmbed(
+    "💰 Pagamento aprovado!",
+    [
+      "Seu pagamento foi confirmado com sucesso.",
+      "",
+      `**VIP:** ${compra.vip.name}`,
+      `**Valor pago:** ${formatMoney(compra.amount)}`,
+      `**Pontos de doação:** ${compra.points}`,
+      "",
+      "Agora envie seu nick exato do Minecraft usando:",
+      `\`${PREFIX}nick SeuNick\``,
+      "",
+      "**Exemplo:**",
+      `\`${PREFIX}nick AndersonAriel\``
+    ].join("\n"),
+    0x57f287
+  );
+}
+
+function createVipDeliveredEmbed(compra, nick) {
+  return baseEmbed(
+    "🎉 VIP entregue com sucesso!",
+    [
+      "Sua compra foi finalizada e o VIP já foi aplicado no servidor.",
+      "",
+      `**Nick:** ${nick}`,
+      `**VIP:** ${compra.vip.name}`,
+      `**Pontos adicionados:** ${compra.points}`,
+      `**Recompensa online:** ${compra.vip.rewardText}`,
+      "",
+      "Obrigado por apoiar o servidor! ❤️"
+    ].join("\n"),
+    0x3498db
+  );
+}
+
+function createVipErrorEmbed(title, lines) {
+  return baseEmbed(title, lines.join("\n"), 0xed4245);
+}
+
+function createCloseTicketRow(compraId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`vip_close_ticket:${compraId}`)
+      .setLabel("Fechar ticket")
+      .setStyle(ButtonStyle.Danger)
+      .setEmoji("🗑️")
+  );
+}
+
+async function safeDeleteMessage(message) {
+  if (!message || !message.deletable) return;
+  try { await message.delete(); } catch {}
+}
+
+async function offerCloseTicket(channel, compra, reason = "manual") {
+  if (!channel || !compra) return;
+
+  const compras = loadComprasVip();
+  const current = compras.find((item) => item.id === compra.id) || compra;
+
+  if (current.closeButtonSent) return;
+
+  current.closeButtonSent = true;
+  current.closeButtonSentAt = new Date().toISOString();
+  current.updatedAt = new Date().toISOString();
+  updateCompraVip(current);
+
+  let description;
+
+  if (reason === "success") {
+    description = [
+      "Sua compra foi concluída com sucesso.",
+      "Se já terminou tudo, você pode fechar este ticket pelo botão abaixo."
+    ].join("\n");
+  } else {
+    description = [
+      "Este ticket já está aberto há alguns minutos.",
+      "Se você não for continuar a compra agora, pode fechá-lo pelo botão abaixo.",
+      "Se quiser continuar depois, basta abrir uma nova compra no painel VIP."
+    ].join("\n");
+  }
+
+  await channel.send({
+    embeds: [baseEmbed("🗑️ Fechar ticket", description, 0xed4245)],
+    components: [createCloseTicketRow(current.id)]
+  }).catch(() => {});
+}
+
+async function scheduleCloseTicketOffer(channel, compra, delayMs = 10 * 60 * 1000) {
+  setTimeout(async () => {
+    try {
+      const compras = loadComprasVip();
+      const current = compras.find((item) => item.id === compra.id);
+      if (!current) return;
+      if (["vip_entregue", "ticket_fechado"].includes(current.status)) return;
+      await offerCloseTicket(channel, current, "timeout");
+    } catch (error) {
+      console.error("Erro ao agendar botão de fechar ticket:", error);
+    }
+  }, delayMs);
+}
+
+async function handleCloseTicketInteraction(interaction, compraId) {
+  const compras = loadComprasVip();
+  const compra = compras.find((item) => item.id === compraId);
+
+  if (!compra) {
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const isOwner = interaction.user.id === compra.discordUserId;
+  const isStaff = canManageVip(interaction);
+
+  if (!isOwner && !isStaff) {
+    await interaction.reply({ content: "❌ Você não tem permissão para fechar este ticket.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  compra.status = "ticket_fechado";
+  compra.closedAt = new Date().toISOString();
+  compra.updatedAt = new Date().toISOString();
+  updateCompraVip(compra);
+
+  await notifyVipLog(compra, `🗑️ Ticket fechado: ${compra.discordTag} | ${compra.vip.name} | status final: ${compra.paymentStatus || compra.status}`);
+
+  await interaction.reply({ content: "🗑️ Fechando ticket...", flags: MessageFlags.Ephemeral }).catch(() => {});
+  setTimeout(async () => {
+    try {
+      await interaction.channel.delete("Ticket de compra VIP finalizado");
+    } catch (error) {
+      console.error("Erro ao fechar ticket VIP:", error);
+    }
+  }, 1500);
+}
+
 async function createPrivateVipChannel(interaction, vip, amount) {
   const guild = interaction.guild;
   if (!guild) throw new Error("Este comando precisa ser usado dentro do servidor Discord.");
-  const channelName = `compra-vip-${interaction.user.username}`.toLowerCase()
+  const channelName = `ticket-compra-${interaction.user.username}`.toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").slice(0, 90);
   const options = {
     name: channelName,
@@ -818,7 +999,8 @@ async function createPrivateVipChannel(interaction, vip, amount) {
     permissionOverwrites: [
       { id: guild.roles.everyone.id, deny: [PermissionsBitField.Flags.ViewChannel] },
       { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] },
-      { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageChannels] }
+      { id: client.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory, PermissionsBitField.Flags.ManageChannels] },
+      ...(VIP_STAFF_ROLE_ID ? [{ id: VIP_STAFF_ROLE_ID, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ReadMessageHistory] }] : [])
     ]
   };
   if (VIP_CATEGORY_ID) options.parent = VIP_CATEGORY_ID;
@@ -840,21 +1022,27 @@ function getMercadoPagoPayerEmail(discordUserId) {
 
 
 function getMercadoPagoNotificationUrl() {
-  const rawUrl = String(PUBLIC_URL || "").trim();
+  let rawUrl = String(PUBLIC_URL || "").trim();
 
   if (!rawUrl) {
     return null;
   }
 
+  // Se a pessoa colocou só bot-production-xxxx.up.railway.app,
+  // o bot corrige automaticamente para https://bot-production-xxxx.up.railway.app
+  if (!rawUrl.startsWith("https://") && !rawUrl.startsWith("http://")) {
+    rawUrl = `https://${rawUrl}`;
+  }
+
   try {
     const url = new URL(rawUrl);
 
-    if (!["https:", "http:"].includes(url.protocol)) {
+    if (url.protocol !== "https:") {
       return null;
     }
 
-    // Mercado Pago não aceita domínio privado/local como webhook.
     const hostname = url.hostname.toLowerCase();
+
     if (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
@@ -934,19 +1122,7 @@ async function sendPurchaseApprovedMessage(compra) {
   try {
     const channel = await client.channels.fetch(compra.channelId);
     if (!channel) return;
-    await channel.send([
-      "✅ **Pagamento aprovado!**",
-      "",
-      `VIP: **${compra.vip.name}**`,
-      `Valor pago: **${formatMoney(compra.amount)}**`,
-      `Pontos de doação: **${compra.points}**`,
-      "",
-      "Agora envie seu nick exato do Minecraft usando:",
-      `\`${PREFIX}nick SeuNick\``,
-      "",
-      "Exemplo:",
-      `\`${PREFIX}nick AndersonAriel\``
-    ].join("\n"));
+    await channel.send({ embeds: [createVipApprovedEmbed(compra)] });
   } catch (error) {
     console.error("Erro ao enviar mensagem de pagamento aprovado:", error);
   }
@@ -984,8 +1160,8 @@ async function applyVipToMinecraft(compra, nick) {
   return await withRcon(async (rcon) => {
     const commands = [
       `ftbranks add ${nick} ${vip.rank}`,
-      `scoreboard players add ${nick} pontos_doacao ${points}`,
-      `execute as ${nick} run function ${vip.rewardFunction}`,
+      `tag ${nick} add ${vip.tag}`,
+      `scoreboard players add ${nick} vip_pontos ${points}`,
       `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Obrigado pelo apoio!","color":"green"}]`
     ];
     const results = [];
@@ -1022,19 +1198,9 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     updatedAt: new Date().toISOString()
   };
   updateCompraVip(compra);
-  await interaction.editReply(`✅ Criei uma sala privada para sua compra: ${channel}`);
-  await channel.send([
-    `Olá ${interaction.user}!`,
-    "",
-    "Esta é sua sala privada de compra VIP.",
-    "",
-    `VIP escolhido: **${vip.name}**`,
-    `Valor escolhido: **${formatMoney(amount)}**`,
-    `Pontos de doação: **${Math.floor(amount)}**`,
-    `Recompensa online: **${vip.rewardText}**`,
-    "",
-    "Gerando QR Code Pix pelo Mercado Pago..."
-  ].join("\n"));
+  await interaction.editReply(`✅ Criei seu ticket de compra VIP: ${channel}`);
+  await channel.send({ embeds: [createVipTicketIntroEmbed(interaction.user, vip, amount)] });
+  await scheduleCloseTicketOffer(channel, compra);
   try {
     const paymentData = await createMercadoPagoPixPayment({
       amount,
@@ -1068,23 +1234,23 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     compra.status = "erro_pagamento";
     compra.updatedAt = new Date().toISOString();
     updateCompraVip(compra);
-    await channel.send([
-      "❌ **Não consegui gerar o Pix agora.**",
-      "",
-      "O Mercado Pago recusou a criação do pagamento ou alguma configuração ainda está incorreta.",
-      "",
-      "**O que fazer:**",
-      "• Você não foi cobrado por essa tentativa.",
-      "• Avise a Staff para verificar o painel Mercado Pago e as variáveis do Railway.",
-      "• Depois que a Staff corrigir, tente comprar novamente.",
-      "",
-      "**Possíveis causas:**",
-      "• MP_ACCESS_TOKEN inválido ou de teste no lugar de produção.",
-      "• Conta Mercado Pago sem chave Pix/sem liberação para receber Pix.",
-      "• PUBLIC_URL sem https:// ou usando domínio privado.",
-      "• E-mail do pagador inválido.",
-      "• Produto integrado da aplicação configurado como Assinaturas em vez de Checkout/Checkout Transparente."
-    ].join("\n"));
+    await channel.send({
+      embeds: [createVipErrorEmbed("❌ Não consegui gerar o Pix agora.", [
+        "O Mercado Pago recusou a criação do pagamento ou alguma configuração ainda está incorreta.",
+        "",
+        "**O que fazer:**",
+        "• Você não foi cobrado por essa tentativa.",
+        "• Avise a Staff para verificar o painel do Mercado Pago e as variáveis do Railway.",
+        "• Depois que a Staff corrigir, tente comprar novamente.",
+        "",
+        "**Possíveis causas:**",
+        "• MP_ACCESS_TOKEN inválido ou de teste no lugar de produção.",
+        "• Conta Mercado Pago sem chave Pix ou sem liberação para receber Pix.",
+        "• PUBLIC_URL sem https:// ou usando domínio privado.",
+        "• E-mail do pagador inválido.",
+        "• Produto integrado da aplicação configurado de forma incorreta."
+      ])]
+    });
   }
 }
 
@@ -1104,22 +1270,15 @@ async function setNickForApprovedVipPurchase(message, nick) {
   compra.status = "aplicando_vip";
   compra.updatedAt = new Date().toISOString();
   updateCompraVip(compra);
-  await message.reply("⏳ Pagamento aprovado. Aplicando VIP no servidor...");
+  await message.reply({ embeds: [baseEmbed("⏳ Aplicando VIP", "Pagamento aprovado. Estou aplicando seu VIP no servidor agora.", 0xfee75c)] });
   try {
     await applyVipToMinecraft(compra, nick);
     compra.status = "vip_entregue";
     compra.updatedAt = new Date().toISOString();
     updateCompraVip(compra);
-    await message.reply([
-      "✅ **VIP entregue com sucesso!**",
-      "",
-      `Nick: **${nick}**`,
-      `VIP: **${compra.vip.name}**`,
-      `Pontos adicionados: **${compra.points}**`,
-      `Recompensa online: **${compra.vip.rewardText}**`,
-      "",
-      "Obrigado por apoiar o servidor!"
-    ].join("\n"));
+    await message.reply({ embeds: [createVipDeliveredEmbed(compra, nick)] });
+    const channel = await client.channels.fetch(compra.channelId).catch(() => null);
+    if (channel) await offerCloseTicket(channel, compra, "success");
     await notifyVipLog(compra, `🎉 VIP entregue: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
   } catch (error) {
     console.error(error);
@@ -1218,6 +1377,12 @@ client.on("interactionCreate", async (interaction) => {
       await startVipPurchaseFromModal(interaction, vip, amount);
       return;
     }
+
+    if (interaction.isButton() && interaction.customId.startsWith("vip_close_ticket:")) {
+      const compraId = interaction.customId.split(":")[1];
+      await handleCloseTicketInteraction(interaction, compraId);
+      return;
+    }
   } catch (error) {
     console.error("Erro em interactionCreate VIP:", error);
 
@@ -1239,7 +1404,7 @@ client.on("messageCreate", async (message) => {
   const content = message.content.trim();
   const isVipRelatedCommand = content === `${PREFIX}comprarvip` || content === `${PREFIX}vipsetup` || content === `${PREFIX}painelvip` || content.startsWith(`${PREFIX}nick `);
   const isVipPanelChannel = VIP_PANEL_CHANNEL_ID && message.channel.id === VIP_PANEL_CHANNEL_ID;
-  const isPrivateVipChannel = message.channel.name?.startsWith("compra-vip-");
+  const isPrivateVipChannel = message.channel.name?.startsWith("ticket-compra-");
 
   if (CHANNEL_ID && message.channel.id !== CHANNEL_ID && !(isVipRelatedCommand && (isVipPanelChannel || isPrivateVipChannel))) return;
 
@@ -1302,6 +1467,7 @@ client.on("messageCreate", async (message) => {
 
     saveEvento(evento);
     await message.reply({ content: "✅ Evento atualizado com sucesso!", embeds: [buildEventoEmbed()] });
+    await safeDeleteMessage(message);
     return;
   }
 
@@ -1321,6 +1487,7 @@ client.on("messageCreate", async (message) => {
     evento.ativo = false;
     saveEvento(evento);
     await message.reply({ content: "✅ Evento removido com sucesso.", embeds: [buildEventoEmbed()] });
+    await safeDeleteMessage(message);
     return;
   }
 
@@ -1382,6 +1549,7 @@ client.on("messageCreate", async (message) => {
 
     saveSorteio(sorteio);
     await message.reply({ content: "✅ Sorteio criado com sucesso!", embeds: [buildSorteioEmbed()] });
+    await safeDeleteMessage(message);
     return;
   }
 
@@ -1443,6 +1611,7 @@ client.on("messageCreate", async (message) => {
     sorteio.ativo = false;
     saveSorteio(sorteio);
     await message.reply("✅ Sorteio cancelado com sucesso.");
+    await safeDeleteMessage(message);
     return;
   }
 
@@ -1482,6 +1651,7 @@ client.on("messageCreate", async (message) => {
     }
     await message.channel.send({ embeds: [createVipPanelEmbed()], components: [createVipSelectRow()] });
     await message.reply("✅ Painel VIP criado com sucesso.");
+    await safeDeleteMessage(message);
     return;
   }
 
@@ -1514,6 +1684,7 @@ client.on("messageCreate", async (message) => {
       `MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN ? "✅ configurado" : "❌ faltando"}`,
       `PUBLIC_URL: ${PUBLIC_URL ? `\`${PUBLIC_URL}\`` : "❌ faltando"}`,
       `Webhook usado pelo bot: ${notificationUrl ? `\`${notificationUrl}\`` : "⚠️ inválido ou desativado"}`,
+      `${PUBLIC_URL && !String(PUBLIC_URL).startsWith("https://") && !String(PUBLIC_URL).startsWith("http://") ? "ℹ️ PUBLIC_URL corrigida automaticamente com https://" : ""}`,
       `MP_PAYER_EMAIL: ${process.env.MP_PAYER_EMAIL ? "✅ configurado" : "⚠️ usando e-mail técnico automático"}`,
       `VIP_PANEL_CHANNEL_ID: ${VIP_PANEL_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_CATEGORY_ID: ${VIP_CATEGORY_ID ? "✅ configurado" : "⚠️ não configurado"}`,
@@ -1521,7 +1692,7 @@ client.on("messageCreate", async (message) => {
       `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
       "",
       "Obs: mesmo sem webhook configurado, o bot tenta confirmar pagamentos pela API automaticamente."
-    ].join("\\n"));
+    ].join("\n"));
     return;
   }
 

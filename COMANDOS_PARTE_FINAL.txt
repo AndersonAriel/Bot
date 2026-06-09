@@ -16,7 +16,7 @@ Exemplo:
 !criarsorteio 🎁 Sorteio valendo VIP | VIP Ferro | Domingo 20h | Clique em participar para concorrer ao VIP
 
 !sortear
-Sorteia um vencedor entre os participantes.
+Sorteia um vencedor entre os participantes. O vencedor é removido da lista e a Staff pode usar !sortear novamente se ele não fizer mais parte do servidor ou não puder receber o prêmio.
 
 !cancelarsorteio
 Cancela o sorteio ativo.
@@ -34,3 +34,8 @@ O sorteio fica salvo no arquivo data/sorteio.json dentro do bot.
 
 !removerevento
 Remove/desativa o evento atual. Exige permissão Gerenciar Servidor ou Administrador.
+
+
+!finalizarsorteio
+Finaliza o sorteio ativo sem sortear mais ninguém, liberando a Staff para criar outro sorteio.
+Exige permissão Gerenciar Servidor ou Administrador.

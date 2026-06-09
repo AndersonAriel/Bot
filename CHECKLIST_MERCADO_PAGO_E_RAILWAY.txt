@@ -1,0 +1,45 @@
+CHECKLIST FINAL - Mercado Pago + Railway + Bot VIP
+
+1. Mercado Pago - aplicação
+- Use uma aplicação para pagamentos online/Checkout/Checkout Transparente.
+- Evite deixar como Assinaturas para venda única de VIP.
+- Tenha chave Pix cadastrada e conta liberada para receber Pix.
+
+2. Credenciais
+- Copie o Access Token de PRODUÇÃO.
+- Coloque no Railway como MP_ACCESS_TOKEN.
+- Não coloque token no GitHub.
+
+3. Railway - PUBLIC_URL
+- Gere um domínio público em Settings > Networking.
+- Coloque no Railway:
+  PUBLIC_URL=https://seu-projeto.up.railway.app
+- Não coloque /webhook/mercadopago no final.
+- Não use RAILWAY_PRIVATE_DOMAIN nem domínio .internal.
+
+4. Mercado Pago - Webhook
+- Vá em Webhooks > Configurar notificações.
+- URL de produção:
+  https://seu-projeto.up.railway.app/webhook/mercadopago
+- Evento: Pagamentos / payment.
+- Salve e simule.
+- O bot também tem verificação automática pela API, então o webhook não é o único caminho.
+
+5. Railway - variáveis do Discord
+- VIP_PANEL_CHANNEL_ID = canal onde fica o painel/comando de comprar VIP.
+- VIP_CATEGORY_ID = categoria onde o bot cria salas privadas.
+- VIP_LOG_CHANNEL_ID = canal privado de logs da Staff.
+- VIP_STAFF_ROLE_ID = cargo Staff opcional.
+
+6. Comandos
+- !vipsetup ou !painelvip: cria painel fixo.
+- !comprarvip: mostra painel.
+- !nick NICK: usado pelo player na sala privada após pagamento aprovado.
+- !vipconfig: Staff confere configurações do sistema VIP.
+
+7. Entrega
+- O bot usa RCON:
+  ftbranks add NICK vip1/vip2/vip3/vip4
+  scoreboard players add NICK pontos_doacao PONTOS
+  execute as NICK run function vip_rewards:vip/vip1/vip2/vip3/vip4
+  tellraw @a anunciando novo VIP

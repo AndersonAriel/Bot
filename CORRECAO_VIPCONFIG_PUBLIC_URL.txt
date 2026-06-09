@@ -1,0 +1,20 @@
+Correção aplicada:
+
+1. Corrigido comando !vipconfig mostrando \n no Discord.
+Agora a mensagem aparece com quebras de linha normais.
+
+2. Corrigido PUBLIC_URL sem https://.
+Antes:
+PUBLIC_URL=bot-production-96587.up.railway.app
+Resultado: webhook inválido.
+
+Agora o bot aceita e corrige automaticamente para:
+https://bot-production-96587.up.railway.app
+
+Mesmo assim, o recomendado no Railway continua sendo colocar:
+PUBLIC_URL=https://bot-production-96587.up.railway.app
+
+3. O webhook final usado pelo bot será:
+https://bot-production-96587.up.railway.app/webhook/mercadopago
+
+Nenhum ranking, sorteio, evento, RCON ou entrega VIP foi alterado.

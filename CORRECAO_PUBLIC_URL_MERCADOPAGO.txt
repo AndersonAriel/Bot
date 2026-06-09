@@ -1,0 +1,24 @@
+Correção aplicada:
+
+Erro visto no Railway:
+notification_url attribute must be url valid
+
+Causa:
+A variável PUBLIC_URL no Railway estava vazia, sem https://, com domínio privado, com caminho errado, ou com /webhook/mercadopago já colocado.
+
+O Mercado Pago exige uma URL pública válida no notification_url.
+
+Como preencher PUBLIC_URL:
+Certo:
+PUBLIC_URL=https://seu-projeto.up.railway.app
+
+Errado:
+PUBLIC_URL=seu-projeto.up.railway.app
+PUBLIC_URL=https://seu-projeto.up.railway.app/webhook/mercadopago
+PUBLIC_URL=RAILWAY_PRIVATE_DOMAIN
+PUBLIC_URL=algum-dominio.railway.internal
+
+Webhook final usado pelo bot:
+https://seu-projeto.up.railway.app/webhook/mercadopago
+
+Também foi reforçada a troca de ready para clientReady para remover o warning do discord.js.

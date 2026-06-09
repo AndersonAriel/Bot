@@ -1,0 +1,14 @@
+Correção feita:
+
+O painel VIP estava aparecendo, mas ao clicar na lista de seleção aparecia "Esta interação falhou".
+
+Motivo:
+O bot tinha o painel e o menu, mas faltava o evento interactionCreate para responder ao clique no menu e abrir o modal de valor.
+
+Adicionado:
+- Handler interactionCreate para vip_select_range
+- Abertura do modal de valor
+- Processamento do modal vip_amount_modal
+- Tratamento de erro com resposta privada
+
+Nenhum ranking, sorteio, evento, RCON ou texto de VIP foi alterado.

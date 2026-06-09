@@ -1,0 +1,14 @@
+Base usado: atm11-rank-bot-vipconfig-publicurl-corrigido.zip
+
+Alterações solicitadas:
+- mensagens do ticket VIP refeitas com visual mais bonito
+- canal privado renomeado para ticket-compra-usuario
+- botão para fechar ticket após entrega do VIP
+- botão para fechar ticket após ~10 minutos sem finalizar
+- staff pode fechar ticket
+- comandos da staff envolvidos no sistema VIP/eventos/sorteios passam a ser apagados após uso
+- aplicação do VIP ajustada para os comandos pedidos:
+  /ftbranks add NICK vip_ferro|vip_ouro|vip_diamante|vip_netherita
+  /tag NICK add vip_ferro|vip_ouro|vip_diamante|vip_netherita
+  /scoreboard players add NICK vip_pontos QUANTIDADE
+- anúncio automático no servidor mantido

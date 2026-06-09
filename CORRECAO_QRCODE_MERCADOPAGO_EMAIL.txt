@@ -1,0 +1,27 @@
+Correção aplicada:
+
+Problema encontrado no Railway:
+Mercado Pago erro: payer.email must be a valid email
+
+Causa:
+O bot estava enviando payer.email com domínio local:
+comprador_ID@atm11.local
+
+O Mercado Pago recusou esse e-mail e por isso não gerava QR Code Pix.
+
+Correção:
+- Adicionado helper getMercadoPagoPayerEmail().
+- Se MP_PAYER_EMAIL estiver definido no Railway e for válido, o bot usa esse e-mail.
+- Se MP_PAYER_EMAIL estiver vazio, o bot usa um e-mail técnico automático em formato válido.
+- Mensagem de erro para o jogador foi melhorada.
+- Removido aviso de ephemeral deprecated usando MessageFlags.Ephemeral.
+- Troca de ready para clientReady para remover warning do discord.js v15.
+
+Variável opcional nova:
+MP_PAYER_EMAIL=
+
+Recomendação:
+Coloque em MP_PAYER_EMAIL um e-mail válido seu ou do servidor, por exemplo:
+MP_PAYER_EMAIL=seuemail@gmail.com
+
+Nunca coloque token do Mercado Pago no GitHub.
