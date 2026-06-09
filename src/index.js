@@ -837,6 +837,38 @@ function getMercadoPagoPayerEmail(discordUserId) {
   return `comprador.${discordUserId}@gmail.com`;
 }
 
+
+function getMercadoPagoNotificationUrl() {
+  const rawUrl = String(PUBLIC_URL || "").trim();
+
+  if (!rawUrl) {
+    return null;
+  }
+
+  try {
+    const url = new URL(rawUrl);
+
+    if (!["https:", "http:"].includes(url.protocol)) {
+      return null;
+    }
+
+    // Mercado Pago não aceita domínio privado/local como webhook.
+    const hostname = url.hostname.toLowerCase();
+    if (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname.endsWith(".internal") ||
+      hostname.includes("railway.internal")
+    ) {
+      return null;
+    }
+
+    return `${url.origin}/webhook/mercadopago`;
+  } catch {
+    return null;
+  }
+}
+
 async function createMercadoPagoPixPayment({ amount, description, discordUserId, compraId }) {
   if (!MP_ACCESS_TOKEN) throw new Error("MP_ACCESS_TOKEN não configurado nas Variables do Railway.");
   const payload = {
@@ -1037,7 +1069,10 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
       "• Você não foi cobrado por essa tentativa.",
       "• Depois que a Staff corrigir, tente comprar novamente.",
       "",
-      "Possíveis causas: token inválido, webhook/domínio incorreto ou e-mail de pagador recusado pelo Mercado Pago."
+      "Possíveis causas: token inválido, PUBLIC_URL incorreta, webhook/domínio privado ou e-mail de pagador recusado pelo Mercado Pago.",
+      "",
+      "Dica para Staff: PUBLIC_URL precisa ser o domínio público HTTPS do Railway, exemplo:",
+      "`https://seu-projeto.up.railway.app`"
     ].join("\n"));
   }
 }
@@ -1092,7 +1127,7 @@ const client = new Client({
   ]
 });
 
-client.once("ready", () => {
+client.once("clientReady", () => {
   console.log(`Bot online como ${client.user.tag}`);
   client.user.setActivity("ATM 11 | !rank");
 
