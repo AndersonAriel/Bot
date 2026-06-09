@@ -1071,6 +1071,57 @@ const client = new Client({
 client.once("ready", () => {
   console.log(`Bot online como ${client.user.tag}`);
   client.user.setActivity("ATM 11 | !rank");
+
+  if (!MP_ACCESS_TOKEN) {
+    console.warn("AVISO: MP_ACCESS_TOKEN não configurado. O painel VIP abre, mas não conseguirá gerar Pix.");
+  }
+
+  if (!PUBLIC_URL) {
+    console.warn("AVISO: PUBLIC_URL não configurada. O Mercado Pago não conseguirá avisar pagamento aprovado por webhook.");
+  }
+});
+
+
+client.on("interactionCreate", async (interaction) => {
+  try {
+    if (interaction.isStringSelectMenu() && interaction.customId === "vip_select_range") {
+      const vip = getVipByKey(interaction.values[0]);
+
+      if (!vip) {
+        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
+        return;
+      }
+
+      await interaction.showModal(createVipAmountModal(vip));
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("vip_amount_modal:")) {
+      const vipKey = interaction.customId.split(":")[1];
+      const vip = getVipByKey(vipKey);
+
+      if (!vip) {
+        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
+        return;
+      }
+
+      const amount = normalizeAmount(interaction.fields.getTextInputValue("amount"));
+      await startVipPurchaseFromModal(interaction, vip, amount);
+      return;
+    }
+  } catch (error) {
+    console.error("Erro em interactionCreate VIP:", error);
+
+    if (interaction.isRepliable()) {
+      const content = "❌ Ocorreu um erro ao processar essa ação. Avise a Staff.";
+
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply(content).catch(() => {});
+      } else {
+        await interaction.reply({ content, ephemeral: true }).catch(() => {});
+      }
+    }
+  }
 });
 
 client.on("messageCreate", async (message) => {
