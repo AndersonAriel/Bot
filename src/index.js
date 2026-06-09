@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const {Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, ChannelType, PermissionsBitField, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags} = require("discord.js");
+const {Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, ChannelType, PermissionsBitField, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, ButtonBuilder, ButtonStyle} = require("discord.js");
 const { Rcon } = require("rcon-client");
 const fs = require("fs");
 const path = require("path");
@@ -22,6 +22,7 @@ const GIVEAWAY_FILE = path.join(DATA_DIR, "sorteio.json");
 const PURCHASES_FILE = path.join(DATA_DIR, "compras_vip.json");
 
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || "";
+const MP_POLL_INTERVAL_SECONDS = Number(process.env.MP_POLL_INTERVAL_SECONDS || 20);
 const PUBLIC_URL = (process.env.PUBLIC_URL || "").replace(/\/$/, "");
 const VIP_PANEL_CHANNEL_ID = process.env.VIP_PANEL_CHANNEL_ID || "";
 const VIP_CATEGORY_ID = process.env.VIP_CATEGORY_ID || "";
@@ -880,6 +881,14 @@ async function createMercadoPagoPixPayment({ amount, description, discordUserId,
     payer: { email: getMercadoPagoPayerEmail(discordUserId), first_name: "Jogador", last_name: "ATM11" }
   };
   if (PUBLIC_URL) payload.notification_url = `${PUBLIC_URL}/webhook/mercadopago`;
+  const notificationUrl = getMercadoPagoNotificationUrl();
+
+  if (notificationUrl) {
+    payload.notification_url = notificationUrl;
+  } else if (PUBLIC_URL) {
+    console.warn(`PUBLIC_URL inválida para webhook Mercado Pago: ${PUBLIC_URL}`);
+  }
+
   const response = await fetch("https://api.mercadopago.com/v1/payments", {
     method: "POST",
     headers: { "Authorization": `Bearer ${MP_ACCESS_TOKEN}`, "Content-Type": "application/json", "X-Idempotency-Key": compraId },
@@ -1062,17 +1071,19 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     await channel.send([
       "❌ **Não consegui gerar o Pix agora.**",
       "",
-      "O Mercado Pago recusou a criação do pagamento ou alguma configuração está incorreta.",
+      "O Mercado Pago recusou a criação do pagamento ou alguma configuração ainda está incorreta.",
       "",
       "**O que fazer:**",
-      "• Avise a Staff para verificar o Mercado Pago.",
       "• Você não foi cobrado por essa tentativa.",
+      "• Avise a Staff para verificar o painel Mercado Pago e as variáveis do Railway.",
       "• Depois que a Staff corrigir, tente comprar novamente.",
       "",
-      "Possíveis causas: token inválido, PUBLIC_URL incorreta, webhook/domínio privado ou e-mail de pagador recusado pelo Mercado Pago.",
-      "",
-      "Dica para Staff: PUBLIC_URL precisa ser o domínio público HTTPS do Railway, exemplo:",
-      "`https://seu-projeto.up.railway.app`"
+      "**Possíveis causas:**",
+      "• MP_ACCESS_TOKEN inválido ou de teste no lugar de produção.",
+      "• Conta Mercado Pago sem chave Pix/sem liberação para receber Pix.",
+      "• PUBLIC_URL sem https:// ou usando domínio privado.",
+      "• E-mail do pagador inválido.",
+      "• Produto integrado da aplicação configurado como Assinaturas em vez de Checkout/Checkout Transparente."
     ].join("\n"));
   }
 }
@@ -1128,6 +1139,7 @@ const client = new Client({
 });
 
 client.once("clientReady", () => {
+  startMercadoPagoPolling();
   console.log(`Bot online como ${client.user.tag}`);
   client.user.setActivity("ATM 11 | !rank");
 
@@ -1140,6 +1152,44 @@ client.once("clientReady", () => {
   }
 });
 
+
+
+let mercadoPagoPollingStarted = false;
+
+async function checkPendingMercadoPagoPayments() {
+  const compras = loadComprasVip();
+  const pending = compras.filter((compra) =>
+    compra.paymentId &&
+    compra.status === "aguardando_pagamento"
+  );
+
+  if (!pending.length) {
+    return;
+  }
+
+  for (const compra of pending) {
+    try {
+      await processMercadoPagoPayment(compra.paymentId);
+    } catch (error) {
+      console.error(`Erro ao verificar pagamento pendente ${compra.paymentId}:`, error.message || error);
+    }
+  }
+}
+
+function startMercadoPagoPolling() {
+  if (mercadoPagoPollingStarted) return;
+  mercadoPagoPollingStarted = true;
+
+  const intervalMs = Math.max(10, MP_POLL_INTERVAL_SECONDS) * 1000;
+
+  setInterval(() => {
+    checkPendingMercadoPagoPayments().catch((error) => {
+      console.error("Erro no verificador automático do Mercado Pago:", error);
+    });
+  }, intervalMs);
+
+  console.log(`Verificador automático Mercado Pago ativo a cada ${Math.round(intervalMs / 1000)}s`);
+}
 
 client.on("interactionCreate", async (interaction) => {
   try {
@@ -1447,6 +1497,31 @@ client.on("messageCreate", async (message) => {
   if (content.startsWith(`${PREFIX}nick `)) {
     const nick = content.slice(`${PREFIX}nick`.length).trim();
     await setNickForApprovedVipPurchase(message, nick);
+    return;
+  }
+
+  if (content === `${PREFIX}vipconfig`) {
+    if (!canManageVip(message)) {
+      await message.reply("❌ Você não tem permissão para ver a configuração VIP.");
+      return;
+    }
+
+    const notificationUrl = getMercadoPagoNotificationUrl();
+
+    await message.reply([
+      "🔎 **Configuração do sistema VIP**",
+      "",
+      `MP_ACCESS_TOKEN: ${MP_ACCESS_TOKEN ? "✅ configurado" : "❌ faltando"}`,
+      `PUBLIC_URL: ${PUBLIC_URL ? `\`${PUBLIC_URL}\`` : "❌ faltando"}`,
+      `Webhook usado pelo bot: ${notificationUrl ? `\`${notificationUrl}\`` : "⚠️ inválido ou desativado"}`,
+      `MP_PAYER_EMAIL: ${process.env.MP_PAYER_EMAIL ? "✅ configurado" : "⚠️ usando e-mail técnico automático"}`,
+      `VIP_PANEL_CHANNEL_ID: ${VIP_PANEL_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `VIP_CATEGORY_ID: ${VIP_CATEGORY_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `VIP_LOG_CHANNEL_ID: ${VIP_LOG_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
+      "",
+      "Obs: mesmo sem webhook configurado, o bot tenta confirmar pagamentos pela API automaticamente."
+    ].join("\\n"));
     return;
   }
 
