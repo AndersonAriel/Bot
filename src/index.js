@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-const { Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, ChannelType, PermissionsBitField, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require("discord.js");
+const {Client, GatewayIntentBits, EmbedBuilder, AttachmentBuilder, ChannelType, PermissionsBitField, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags} = require("discord.js");
 const { Rcon } = require("rcon-client");
 const fs = require("fs");
 const path = require("path");
@@ -824,6 +824,19 @@ async function createPrivateVipChannel(interaction, vip, amount) {
   return await guild.channels.create(options);
 }
 
+
+function getMercadoPagoPayerEmail(discordUserId) {
+  const configuredEmail = String(process.env.MP_PAYER_EMAIL || "").trim();
+
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(configuredEmail)) {
+    return configuredEmail;
+  }
+
+  // Mercado Pago rejeita domínios locais como atm11.local.
+  // Este e-mail é apenas para preencher o campo obrigatório do payer.
+  return `comprador.${discordUserId}@gmail.com`;
+}
+
 async function createMercadoPagoPixPayment({ amount, description, discordUserId, compraId }) {
   if (!MP_ACCESS_TOKEN) throw new Error("MP_ACCESS_TOKEN não configurado nas Variables do Railway.");
   const payload = {
@@ -832,7 +845,7 @@ async function createMercadoPagoPixPayment({ amount, description, discordUserId,
     payment_method_id: "pix",
     external_reference: compraId,
     metadata: { compra_id: compraId, discord_user_id: discordUserId },
-    payer: { email: `comprador_${discordUserId}@atm11.local`, first_name: "Jogador", last_name: "ATM11" }
+    payer: { email: getMercadoPagoPayerEmail(discordUserId), first_name: "Jogador", last_name: "ATM11" }
   };
   if (PUBLIC_URL) payload.notification_url = `${PUBLIC_URL}/webhook/mercadopago`;
   const response = await fetch("https://api.mercadopago.com/v1/payments", {
@@ -946,10 +959,10 @@ async function applyVipToMinecraft(compra, nick) {
 async function startVipPurchaseFromModal(interaction, vip, amount) {
   const detectedVip = getVipByAmount(amount);
   if (!detectedVip || detectedVip.key !== vip.key) {
-    await interaction.reply({ content: `❌ Valor inválido para ${vip.name}. Use ${vip.max >= 9999 ? `R$${vip.min} ou mais` : `entre R$${vip.min} e R$${vip.max}`}.`, ephemeral: true });
+    await interaction.reply({ content: `❌ Valor inválido para ${vip.name}. Use ${vip.max >= 9999 ? `R$${vip.min} ou mais` : `entre R$${vip.min} e R$${vip.max}`}.`, flags: MessageFlags.Ephemeral });
     return;
   }
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const channel = await createPrivateVipChannel(interaction, vip, amount);
   const compraId = generateCompraVipId();
   const compra = {
@@ -1010,11 +1023,22 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     if (attachment) await channel.send({ content: paymentMessage, files: [attachment] });
     else await channel.send(paymentMessage);
   } catch (error) {
-    console.error(error);
+    console.error("Erro ao gerar Pix Mercado Pago:", error);
     compra.status = "erro_pagamento";
     compra.updatedAt = new Date().toISOString();
     updateCompraVip(compra);
-    await channel.send("❌ Não consegui gerar o Pix. Avise a Staff para verificar o Mercado Pago/MP_ACCESS_TOKEN.");
+    await channel.send([
+      "❌ **Não consegui gerar o Pix agora.**",
+      "",
+      "O Mercado Pago recusou a criação do pagamento ou alguma configuração está incorreta.",
+      "",
+      "**O que fazer:**",
+      "• Avise a Staff para verificar o Mercado Pago.",
+      "• Você não foi cobrado por essa tentativa.",
+      "• Depois que a Staff corrigir, tente comprar novamente.",
+      "",
+      "Possíveis causas: token inválido, webhook/domínio incorreto ou e-mail de pagador recusado pelo Mercado Pago."
+    ].join("\n"));
   }
 }
 
@@ -1088,7 +1112,7 @@ client.on("interactionCreate", async (interaction) => {
       const vip = getVipByKey(interaction.values[0]);
 
       if (!vip) {
-        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
+        await interaction.reply({ content: "❌ VIP inválido.", flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -1101,7 +1125,7 @@ client.on("interactionCreate", async (interaction) => {
       const vip = getVipByKey(vipKey);
 
       if (!vip) {
-        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
+        await interaction.reply({ content: "❌ VIP inválido.", flags: MessageFlags.Ephemeral });
         return;
       }
 
@@ -1118,7 +1142,7 @@ client.on("interactionCreate", async (interaction) => {
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(content).catch(() => {});
       } else {
-        await interaction.reply({ content, ephemeral: true }).catch(() => {});
+        await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
       }
     }
   }
