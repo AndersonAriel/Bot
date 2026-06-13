@@ -512,7 +512,7 @@ function buildEventoEmbed() {
       [
         "No momento não existe evento ativo.",
         "",
-        "Quando a Staff criar um novo evento, ele aparecerá aqui."
+        "Quando um novo evento for criado, ele aparecerá aqui."
       ].join("\n"),
       0xffcc00
     );
@@ -692,7 +692,7 @@ function buildSorteioEmbed() {
       [
         "No momento não existe sorteio ativo.",
         "",
-        "Quando a Staff criar um sorteio, ele aparecerá aqui.",
+        "Quando um novo sorteio for criado, ele aparecerá aqui.",
         "",
         "Comando para participar quando tiver sorteio:",
         `\`${PREFIX}participar\``
@@ -794,12 +794,11 @@ function buildComandosEmbed() {
   return baseEmbed(
     "🤖 Comandos do Bot ATM 11",
     [
-      "**Canais separados:**",
+      "**Canais do bot:**",
       `Comandos gerais: ${formatDiscordChannel(GENERAL_COMMAND_CHANNEL_ID, "canal geral")}`,
       `Rankings: ${formatDiscordChannel(RANK_COMMAND_CHANNEL_ID, "canal de rankings")}`,
       `Sorteios/Eventos: ${formatDiscordChannel(GIVEAWAY_COMMAND_CHANNEL_ID, "canal de sorteios")}`,
       `Compra VIP: ${formatDiscordChannel(VIP_PANEL_CHANNEL_ID, "canal de compra VIP")}`,
-      `Staff: ${formatDiscordChannel(STAFF_COMMAND_CHANNEL_ID, "canal da Staff")}`,
       "",
       "**Informações:**",
       `\`${PREFIX}ip\` — IP do servidor`,
@@ -828,21 +827,38 @@ function buildComandosEmbed() {
       `\`${PREFIX}rank mobs\``,
       `\`${PREFIX}rank mortes\``,
       `\`${PREFIX}rank minerios\``,
-      `\`${PREFIX}rank tempo\``,
-      "",
-      "**Staff:**",
-      `\`${PREFIX}setevento Título | Data | Prêmio | Texto\``,
-      `\`${PREFIX}removerevento\``,
-      `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto\``,
-      `\`${PREFIX}sortear\``,
-      `\`${PREFIX}cancelarsorteio\``,
-      `\`${PREFIX}finalizarsorteio\``,
-      `\`${PREFIX}vipsetup\` — criar painel VIP`,
-      `\`${PREFIX}vipconfig\` — conferir configuração VIP/Mercado Pago`,
-      `\`${PREFIX}vipativos\` — listar VIPs ativos registrados pelo bot`,
-      `\`${PREFIX}vipcheck\` — forçar verificação de avisos/vencimentos VIP`
+      `\`${PREFIX}rank tempo\``
     ].join("\n"),
     0x8a2be2
+  );
+}
+
+function buildStaffComandosEmbed() {
+  return baseEmbed(
+    "🛠️ Comandos da Staff",
+    [
+      "**Eventos:**",
+      `\`${PREFIX}setevento Título | Data | Prêmio | Texto\` — criar/atualizar evento`,
+      `\`${PREFIX}removerevento\` — remover evento atual`,
+      "",
+      "**Sorteios:**",
+      `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto\` — criar sorteio`,
+      `\`${PREFIX}sortear\` — sortear vencedor`,
+      `\`${PREFIX}cancelarsorteio\` — cancelar sorteio`,
+      `\`${PREFIX}finalizarsorteio\` — finalizar sorteio`,
+      "",
+      "**VIP / Loja:**",
+      `\`${PREFIX}vipsetup\` ou \`${PREFIX}painelvip\` — publicar painel de compra VIP`,
+      `\`${PREFIX}vipconfig\` — conferir configuração do sistema VIP`,
+      `\`${PREFIX}vipativos\` — listar VIPs ativos registrados pelo bot`,
+      `\`${PREFIX}vipcheck\` — forçar verificação de avisos/vencimentos VIP`,
+      "",
+      "**Canais recomendados:**",
+      `Comandos da Staff: ${formatDiscordChannel(STAFF_COMMAND_CHANNEL_ID, "canal da Staff")}`,
+      `Painel VIP: ${formatDiscordChannel(VIP_PANEL_CHANNEL_ID, "canal de compra VIP")}`,
+      `Logs VIP: ${formatDiscordChannel(VIP_LOG_CHANNEL_ID, "canal de logs VIP")}`
+    ].join("\n"),
+    0x5865f2
   );
 }
 
@@ -1157,7 +1173,7 @@ const VIP_PANEL_COMMANDS = new Set(["comprarvip"]);
 const TICKET_COMMANDS = new Set(["nick"]);
 const STAFF_COMMANDS = new Set([
   "setevento", "removerevento", "criarsorteio", "sortear", "cancelarsorteio", "finalizarsorteio",
-  "vipsetup", "painelvip", "vipconfig", "vipativos", "vipcheck"
+  "vipsetup", "painelvip", "vipconfig", "vipativos", "vipcheck", "comandosstaff", "staffcomandos", "staffcmds"
 ]);
 
 function getCommandName(content) {
@@ -1361,7 +1377,7 @@ function createVipNeedsOnlineEmbed(compra, nick) {
   return baseEmbed(
     "⚠️ Entre no servidor para receber o VIP",
     [
-      "Seu pagamento já está aprovado, mas o bot não encontrou esse nick puro online no servidor.",
+      "Seu pagamento já está aprovado, mas não encontrei esse nick online no servidor.",
       "",
       `**Nick informado:** ${nick}`,
       `**VIP:** ${compra.vip.name}`,
@@ -1383,7 +1399,7 @@ function createVipNickSavedEmbed(compra) {
       `Nick configurado: **${compra.minecraftNick}**`,
       "",
       "Agora entre no servidor com esse nick e clique em **Receber VIP agora**.",
-      "O bot vai verificar somente o nick puro, sem prefixo/tag do chat, antes de aplicar o VIP."
+      "Depois clique em **Receber VIP agora** para finalizar a entrega."
     ].join("\n"),
     0x57f287
   );
@@ -1461,29 +1477,29 @@ async function handleVipNickModalSubmit(interaction, compraId) {
   const compra = findCompraVipById(compraId);
 
   if (!compra) {
-    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", ephemeral: true });
     return;
   }
 
   if (!canUseVipTicketAction(interaction, compra)) {
-    await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", ephemeral: true });
     return;
   }
 
   if (compra.status === "vip_entregue") {
-    await interaction.reply({ content: "⚠️ Esse VIP já foi entregue.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ Esse VIP já foi entregue.", ephemeral: true });
     return;
   }
 
   if (!VIP_DELIVERY_PENDING_STATUSES.has(compra.status)) {
-    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para informar o nick.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para informar o nick.", ephemeral: true });
     return;
   }
 
   const nick = interaction.fields.getTextInputValue("minecraft_nick").trim();
 
   if (!isValidMinecraftNick(nick)) {
-    await interaction.reply({ content: "❌ Nick inválido. Use exatamente o nick do Minecraft, com 3 a 16 caracteres, somente letras, números e underline.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "❌ Nick inválido. Use exatamente o nick do Minecraft, com 3 a 16 caracteres, somente letras, números e underline.", ephemeral: true });
     return;
   }
 
@@ -1499,29 +1515,29 @@ async function handleReceiveVipNowInteraction(interaction, compraId) {
   const compra = findCompraVipById(compraId);
 
   if (!compra) {
-    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", ephemeral: true });
     return;
   }
 
   if (!canUseVipTicketAction(interaction, compra)) {
-    await interaction.reply({ content: "❌ Você não tem permissão para receber este VIP.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "❌ Você não tem permissão para receber este VIP.", ephemeral: true });
     return;
   }
 
   if (compra.status === "vip_entregue") {
-    await interaction.reply({ content: "✅ Esse VIP já foi entregue.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "✅ Esse VIP já foi entregue.", ephemeral: true });
     return;
   }
 
   if (!VIP_DELIVERY_PENDING_STATUSES.has(compra.status)) {
-    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para entregar o VIP.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para entregar o VIP.", ephemeral: true });
     return;
   }
 
   if (!compra.minecraftNick) {
     await interaction.reply({
       content: "⚠️ Primeiro informe seu nick pelo botão **Informar/editar nick** ou usando `!nick SeuNick` neste ticket.",
-      flags: MessageFlags.Ephemeral
+      ephemeral: true
     });
     return;
   }
@@ -1569,7 +1585,7 @@ async function handleReceiveVipNowInteraction(interaction, compraId) {
 
     console.error("Erro ao entregar VIP:", error);
     await interaction.editReply({
-      content: "❌ Pagamento aprovado, mas houve erro ao aplicar o VIP via RCON. Avise a Staff.",
+      content: "❌ Não consegui entregar o VIP agora. Verifique se o nick está correto, entre no servidor e tente novamente. Se continuar, chame a equipe.",
       components: [createVipDeliveryActionRow(compra.id)]
     });
   }
@@ -1666,7 +1682,7 @@ async function handleCloseTicketInteraction(interaction, compraId) {
   const compra = compras.find((item) => item.id === compraId);
 
   if (!compra) {
-    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", ephemeral: true });
     return;
   }
 
@@ -1674,14 +1690,14 @@ async function handleCloseTicketInteraction(interaction, compraId) {
   const isStaff = canManageVip(interaction);
 
   if (!isOwner && !isStaff) {
-    await interaction.reply({ content: "❌ Você não tem permissão para fechar este ticket.", flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: "❌ Você não tem permissão para fechar este ticket.", ephemeral: true });
     return;
   }
 
   if (!isStaff && compra.status !== "vip_entregue") {
     await interaction.reply({
       content: "⚠️ Este ticket ainda está em processo de entrega. Ele só pode ser fechado pelo player depois que o VIP for entregue com sucesso.",
-      flags: MessageFlags.Ephemeral
+      ephemeral: true
     });
     return;
   }
@@ -1693,7 +1709,7 @@ async function handleCloseTicketInteraction(interaction, compraId) {
 
   await notifyVipLog(compra, `🗑️ Ticket fechado: ${compra.discordTag} | ${compra.vip.name} | status final: ${compra.paymentStatus || compra.status}`);
 
-  await interaction.reply({ content: "🗑️ Fechando ticket...", flags: MessageFlags.Ephemeral }).catch(() => {});
+  await interaction.reply({ content: "🗑️ Fechando ticket...", ephemeral: true }).catch(() => {});
   setTimeout(async () => {
     try {
       await interaction.channel.delete("Ticket de compra VIP finalizado");
@@ -1907,10 +1923,10 @@ async function applyVipToMinecraft(compra, nick) {
 async function startVipPurchaseFromModal(interaction, vip, amount) {
   const detectedVip = getVipByAmount(amount);
   if (!detectedVip || detectedVip.key !== vip.key) {
-    await interaction.reply({ content: `❌ Valor inválido para ${vip.name}. Use ${vip.max >= 9999 ? `R$${vip.min} ou mais` : `entre R$${vip.min} e R$${vip.max}`}.`, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: `❌ Valor inválido para ${vip.name}. Use ${vip.max >= 9999 ? `R$${vip.min} ou mais` : `entre R$${vip.min} e R$${vip.max}`}.`, ephemeral: true });
     return;
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  await interaction.deferReply({ ephemeral: true });
   const channel = await createPrivateVipChannel(interaction, vip, amount);
   const compraId = generateCompraVipId();
   const compra = {
@@ -1929,7 +1945,7 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     updatedAt: new Date().toISOString()
   };
   updateCompraVip(compra);
-  await interaction.editReply(`✅ Criei seu ticket de compra VIP: ${channel}`);
+  await interaction.editReply({ content: `✅ Seu ticket de compra VIP foi criado: <#${channel.id}>` });
   await channel.send({ embeds: [createVipTicketIntroEmbed(interaction.user, vip, amount)] });
   await scheduleCloseTicketOffer(channel, compra);
   try {
@@ -1968,21 +1984,13 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
     updateCompraVip(compra);
     await channel.send({
       embeds: [createVipErrorEmbed("❌ Não consegui gerar o Pix agora.", [
-        "O Mercado Pago recusou a criação do pagamento ou alguma configuração ainda está incorreta.",
+        "Não foi possível criar o pagamento neste momento.",
         "",
-        "**O que fazer:**",
-        "• Você não foi cobrado por essa tentativa.",
-        "• Avise a Staff para verificar o painel do Mercado Pago e as variáveis do Railway.",
-        "• Depois que a Staff corrigir, tente comprar novamente.",
-        "",
-        "**Possíveis causas:**",
-        "• MP_ACCESS_TOKEN inválido ou de teste no lugar de produção.",
-        "• Conta Mercado Pago sem chave Pix ou sem liberação para receber Pix.",
-        "• PUBLIC_URL sem https:// ou usando domínio privado.",
-        "• E-mail do pagador inválido.",
-        "• Produto integrado da aplicação configurado de forma incorreta."
+        "Você não foi cobrado por essa tentativa.",
+        "Tente novamente em alguns minutos. Se o problema continuar, chame a equipe."
       ])]
     });
+    await notifyVipLog(compra, `❌ Erro ao gerar Pix: ${compra.discordTag} | ${vip.name} | ${formatMoney(amount)} | ${String(error?.message || error).slice(0, 500)}`);
   }
 }
 
@@ -2089,7 +2097,7 @@ client.on("interactionCreate", async (interaction) => {
       const vip = getVipByKey(interaction.values[0]);
 
       if (!vip) {
-        await interaction.reply({ content: "❌ VIP inválido.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
         return;
       }
 
@@ -2102,7 +2110,7 @@ client.on("interactionCreate", async (interaction) => {
       const vip = getVipByKey(vipKey);
 
       if (!vip) {
-        await interaction.reply({ content: "❌ VIP inválido.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: "❌ VIP inválido.", ephemeral: true });
         return;
       }
 
@@ -2122,12 +2130,12 @@ client.on("interactionCreate", async (interaction) => {
       const compra = findCompraVipById(compraId);
 
       if (!compra) {
-        await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", ephemeral: true });
         return;
       }
 
       if (!canUseVipTicketAction(interaction, compra)) {
-        await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", ephemeral: true });
         return;
       }
 
@@ -2150,12 +2158,12 @@ client.on("interactionCreate", async (interaction) => {
     console.error("Erro em interactionCreate VIP:", error);
 
     if (interaction.isRepliable()) {
-      const content = "❌ Ocorreu um erro ao processar essa ação. Avise a Staff.";
+      const content = "❌ Não consegui processar essa ação agora. Tente novamente em alguns instantes.";
 
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply(content).catch(() => {});
       } else {
-        await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => {});
+        await interaction.reply({ content, ephemeral: true }).catch(() => {});
       }
     }
   }
@@ -2268,7 +2276,7 @@ client.on("messageCreate", async (message) => {
       await loading.edit({ content: "", embeds: [embed] });
     } catch (error) {
       console.error(error);
-      await loading.edit("❌ Não consegui consultar o servidor. Confira RCON_HOST, RCON_PORT e RCON_PASSWORD no Railway.");
+      await loading.edit("❌ Não consegui consultar o servidor agora. Tente novamente em alguns instantes.");
     }
     return;
   }
@@ -2280,13 +2288,23 @@ client.on("messageCreate", async (message) => {
       await loading.edit({ content: "", embeds: [embed] });
     } catch (error) {
       console.error(error);
-      await loading.edit("❌ Não consegui consultar os jogadores online. Confira se o RCON está ativo.");
+      await loading.edit("❌ Não consegui consultar os jogadores online agora. Tente novamente em alguns instantes.");
     }
     return;
   }
 
   if (content === `${PREFIX}comandos` || content === `${PREFIX}ajuda`) {
     await message.reply({ embeds: [buildComandosEmbed()] });
+    return;
+  }
+
+  if ([`${PREFIX}comandosstaff`, `${PREFIX}staffcomandos`, `${PREFIX}staffcmds`].includes(content)) {
+    if (!canManageVip(message)) {
+      await message.reply("❌ Você não tem permissão para ver os comandos da Staff.");
+      return;
+    }
+
+    await message.reply({ embeds: [buildStaffComandosEmbed()] });
     return;
   }
 
@@ -2355,7 +2373,7 @@ client.on("messageCreate", async (message) => {
 
     if (result.aindaAtivo) {
       lines.push("");
-      lines.push("Caso o vencedor não faça mais parte do servidor ou não possa receber o prêmio, a Staff pode usar `!sortear` novamente.");
+      lines.push("Caso o vencedor não possa receber o prêmio, a equipe pode sortear novamente.");
     } else {
       lines.push("");
       lines.push("Não há mais participantes restantes. O sorteio foi encerrado automaticamente.");
@@ -2404,7 +2422,7 @@ client.on("messageCreate", async (message) => {
     await message.reply([
       "✅ **Sorteio finalizado com sucesso.**",
       "",
-      "Agora a Staff já pode criar outro sorteio usando:",
+      "Agora a equipe já pode criar outro sorteio usando:",
       `\`${PREFIX}criarsorteio Título | Prêmio | Data | Texto do sorteio\``
     ].join("\n"));
     return;
@@ -2545,7 +2563,7 @@ client.on("messageCreate", async (message) => {
     await loading.edit({ content: "", embeds: [buildRankingEmbed(rankKey, rows)] });
   } catch (error) {
     console.error(error);
-    await loading.edit("❌ Não consegui buscar o ranking. Confira se o RCON está ativo e se o datapack `atm11_rankings_discord` está instalado.");
+    await loading.edit("❌ Não consegui buscar o ranking agora. Tente novamente em alguns instantes.");
   }
 });
 
