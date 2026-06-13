@@ -25,6 +25,9 @@ const GIVEAWAY_FILE = path.join(DATA_DIR, "sorteio.json");
 
 const PURCHASES_FILE = path.join(DATA_DIR, "compras_vip.json");
 const VIP_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "vip_assinaturas.json");
+const VIP_STORAGE_CHANNEL_ID = process.env.VIP_STORAGE_CHANNEL_ID || "";
+const VIP_STORAGE_MARKER = "ATM11_VIP_SUBSCRIPTIONS_BACKUP_V1";
+const VIP_STORAGE_FILENAME = "vip_assinaturas.json";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const VIP_DURATION_DAYS = Math.max(1, Number(process.env.VIP_DURATION_DAYS || 30));
 const VIP_EXPIRY_CHECK_INTERVAL_MINUTES = Math.max(5, Number(process.env.VIP_EXPIRY_CHECK_INTERVAL_MINUTES || 60));
@@ -852,6 +855,7 @@ function buildStaffComandosEmbed() {
       `\`${PREFIX}vipconfig\` — conferir configuração do sistema VIP`,
       `\`${PREFIX}vipativos\` — listar VIPs ativos registrados pelo bot`,
       `\`${PREFIX}vipcheck\` — forçar verificação de avisos/vencimentos VIP`,
+      `\`${PREFIX}vipsync\` — sincronizar/restaurar VIPs salvos`,
       "",
       "**Canais recomendados:**",
       `Comandos da Staff: ${formatDiscordChannel(STAFF_COMMAND_CHANNEL_ID, "canal da Staff")}`,
@@ -895,7 +899,7 @@ function loadVipSubscriptions() {
   ensureDataDir();
 
   if (!fs.existsSync(VIP_SUBSCRIPTIONS_FILE)) {
-    saveVipSubscriptions([]);
+    saveVipSubscriptionsLocal([]);
     return [];
   }
 
@@ -903,14 +907,205 @@ function loadVipSubscriptions() {
     const data = JSON.parse(fs.readFileSync(VIP_SUBSCRIPTIONS_FILE, "utf8"));
     return Array.isArray(data) ? data : [];
   } catch {
-    saveVipSubscriptions([]);
+    saveVipSubscriptionsLocal([]);
     return [];
   }
 }
 
-function saveVipSubscriptions(subscriptions) {
+function saveVipSubscriptionsLocal(subscriptions) {
   ensureDataDir();
-  fs.writeFileSync(VIP_SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2), "utf8");
+  fs.writeFileSync(VIP_SUBSCRIPTIONS_FILE, JSON.stringify(Array.isArray(subscriptions) ? subscriptions : [], null, 2), "utf8");
+}
+
+function saveVipSubscriptions(subscriptions) {
+  saveVipSubscriptionsLocal(subscriptions);
+  queueVipStorageBackup(subscriptions);
+}
+
+function getVipStorageChannelId() {
+  return VIP_STORAGE_CHANNEL_ID || "";
+}
+
+async function fetchVipStorageChannel() {
+  const channelId = getVipStorageChannelId();
+  if (!channelId || !client?.isReady?.()) return null;
+  return await client.channels.fetch(channelId).catch(() => null);
+}
+
+async function findVipStorageMessage(channel) {
+  if (!channel || !channel.messages?.fetch) return null;
+  const messages = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  if (!messages) return null;
+  return messages.find((msg) =>
+    msg.author?.id === client.user?.id &&
+    typeof msg.content === "string" &&
+    msg.content.startsWith(VIP_STORAGE_MARKER)
+  ) || null;
+}
+
+function buildVipStorageAttachment(subscriptions) {
+  const payload = JSON.stringify(Array.isArray(subscriptions) ? subscriptions : [], null, 2);
+  return new AttachmentBuilder(Buffer.from(payload, "utf8"), { name: VIP_STORAGE_FILENAME });
+}
+
+let vipStorageBackupRunning = false;
+let vipStorageBackupQueued = false;
+
+function queueVipStorageBackup(subscriptions) {
+  if (!getVipStorageChannelId()) return;
+  if (!client?.isReady?.()) return;
+
+  const snapshot = JSON.parse(JSON.stringify(Array.isArray(subscriptions) ? subscriptions : []));
+
+  if (vipStorageBackupRunning) {
+    vipStorageBackupQueued = true;
+    return;
+  }
+
+  vipStorageBackupRunning = true;
+  backupVipSubscriptionsToDiscord(snapshot)
+    .catch((error) => console.warn("Não consegui salvar backup VIP no Discord:", error.message || error))
+    .finally(() => {
+      vipStorageBackupRunning = false;
+      if (vipStorageBackupQueued) {
+        vipStorageBackupQueued = false;
+        queueVipStorageBackup(loadVipSubscriptions());
+      }
+    });
+}
+
+async function backupVipSubscriptionsToDiscord(subscriptions) {
+  const channel = await fetchVipStorageChannel();
+  if (!channel) return;
+
+  const content = `${VIP_STORAGE_MARKER}
+Última atualização: ${formatDateTimeBR(new Date())}
+Total de registros: ${Array.isArray(subscriptions) ? subscriptions.length : 0}`;
+  const file = buildVipStorageAttachment(subscriptions);
+  const existing = await findVipStorageMessage(channel);
+
+  if (existing) {
+    await existing.edit({ content, files: [file] });
+  } else {
+    await channel.send({ content, files: [file] });
+  }
+}
+
+async function readVipSubscriptionsFromDiscord() {
+  const channel = await fetchVipStorageChannel();
+  if (!channel) return null;
+  const message = await findVipStorageMessage(channel);
+  if (!message) return null;
+
+  const attachment = message.attachments.find((att) => att.name === VIP_STORAGE_FILENAME) || message.attachments.first();
+  if (!attachment?.url) return null;
+
+  const response = await fetch(attachment.url);
+  if (!response.ok) throw new Error(`Falha ao baixar backup VIP: HTTP ${response.status}`);
+  const data = JSON.parse(await response.text());
+  return Array.isArray(data) ? data : [];
+}
+
+function normalizeSubscriptionRecord(sub) {
+  if (!sub || typeof sub !== "object") return null;
+  if (!sub.id) sub.id = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+  if (!Array.isArray(sub.purchaseIds)) sub.purchaseIds = sub.lastPurchaseId ? [sub.lastPurchaseId] : [];
+  if (!Array.isArray(sub.warningDaysSent)) sub.warningDaysSent = [];
+  if (!sub.status) sub.status = "active";
+  if (!sub.updatedAt) sub.updatedAt = new Date().toISOString();
+  return sub;
+}
+
+function mergeSubscriptionLists(primary, secondary) {
+  const byKey = new Map();
+  for (const item of [...(Array.isArray(secondary) ? secondary : []), ...(Array.isArray(primary) ? primary : [])]) {
+    const sub = normalizeSubscriptionRecord({ ...item });
+    if (!sub) continue;
+    const key = sub.id || `${String(sub.nick || "").toLowerCase()}_${sub.rank || sub.vipKey || "vip"}_${sub.expiresAt || ""}`;
+    const previous = byKey.get(key);
+    if (!previous || new Date(sub.updatedAt || 0).getTime() >= new Date(previous.updatedAt || 0).getTime()) {
+      byKey.set(key, sub);
+    }
+  }
+  return [...byKey.values()];
+}
+
+function migrateDeliveredPurchasesToVipSubscriptions({ save = true } = {}) {
+  const compras = loadComprasVip();
+  let subscriptions = loadVipSubscriptions();
+  let changed = false;
+
+  for (const compra of compras) {
+    if (compra.status !== "vip_entregue") continue;
+    if (!compra.minecraftNick || !compra.vip?.rank) continue;
+
+    const already = subscriptions.some((sub) =>
+      Array.isArray(sub.purchaseIds) && sub.purchaseIds.includes(compra.id)
+    );
+    if (already) continue;
+
+    const startedAt = compra.vipStartedAt || compra.updatedAt || compra.createdAt || new Date().toISOString();
+    const expiresAt = compra.vipExpiresAt || new Date(new Date(startedAt).getTime() + VIP_DURATION_DAYS * DAY_MS).toISOString();
+
+    subscriptions.push({
+      id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+      purchaseIds: [compra.id],
+      lastPurchaseId: compra.id,
+      discordUserId: compra.discordUserId || null,
+      discordTag: compra.discordTag || null,
+      nick: compra.minecraftNick,
+      vipKey: compra.vip.key,
+      vipName: compra.vip.name,
+      rank: compra.vip.rank,
+      amount: Number(compra.amount || 0),
+      points: Number(compra.points || Math.floor(Number(compra.amount || 0))),
+      startedAt,
+      expiresAt,
+      status: new Date(expiresAt).getTime() > Date.now() ? "active" : "expired",
+      warningDaysSent: [],
+      createdAt: startedAt,
+      updatedAt: new Date().toISOString(),
+      migratedFromPurchase: true
+    });
+    changed = true;
+  }
+
+  if (changed && save) saveVipSubscriptions(subscriptions);
+  return { changed, subscriptions };
+}
+
+async function restoreVipSubscriptionsStorage() {
+  ensureDataDir();
+  let local = loadVipSubscriptions();
+
+  if (!getVipStorageChannelId()) {
+    const migrated = migrateDeliveredPurchasesToVipSubscriptions({ save: true });
+    if (migrated.changed) console.log(`VIP: ${migrated.subscriptions.length} assinatura(s) após migração local de compras entregues.`);
+    console.warn("VIP_STORAGE_CHANNEL_ID não configurado. O bot salvará VIPs apenas em data/vip_assinaturas.json no ambiente atual.");
+    return;
+  }
+
+  try {
+    const remote = await readVipSubscriptionsFromDiscord();
+    if (Array.isArray(remote)) {
+      const merged = mergeSubscriptionLists(remote, local);
+      saveVipSubscriptionsLocal(merged);
+      local = merged;
+      console.log(`VIP: backup do Discord restaurado/sincronizado com ${merged.length} registro(s).`);
+    } else {
+      console.log("VIP: nenhum backup Discord encontrado ainda; será criado no próximo salvamento.");
+    }
+  } catch (error) {
+    console.warn("Não consegui restaurar backup VIP do Discord:", error.message || error);
+  }
+
+  const migrated = migrateDeliveredPurchasesToVipSubscriptions({ save: false });
+  if (migrated.changed) {
+    saveVipSubscriptions(migrated.subscriptions);
+    console.log(`VIP: ${migrated.subscriptions.length} assinatura(s) após migração de compras entregues.`);
+  } else {
+    queueVipStorageBackup(loadVipSubscriptions());
+  }
 }
 
 function formatDateTimeBR(dateLike) {
@@ -1173,7 +1368,7 @@ const VIP_PANEL_COMMANDS = new Set(["comprarvip"]);
 const TICKET_COMMANDS = new Set(["nick"]);
 const STAFF_COMMANDS = new Set([
   "setevento", "removerevento", "criarsorteio", "sortear", "cancelarsorteio", "finalizarsorteio",
-  "vipsetup", "painelvip", "vipconfig", "vipativos", "vipcheck", "comandosstaff", "staffcomandos", "staffcmds"
+  "vipsetup", "painelvip", "vipconfig", "vipativos", "vipcheck", "vipsync", "comandosstaff", "staffcomandos", "staffcmds"
 ]);
 
 function getCommandName(content) {
@@ -1902,21 +2097,30 @@ async function applyVipToMinecraft(compra, nick) {
       await rcon.send(`ftbranks remove ${nick} ${rank}`).catch(() => {});
     }
 
-    const commands = [
-      // FTB Ranks já controla o rank, prefixo, permissões, tags/nodes e recompensa online.
-      `ftbranks add ${nick} ${vip.rank}`,
-      // Pontos VIP pelo comando oficial do sistema novo da loja.
-      `darpontosvip ${nick} ${points}`,
-      `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Recebeu ${points} Pontos VIP. Obrigado pelo apoio!","color":"green"}]`
-    ];
     const results = [];
-    for (const command of commands) {
+
+    // Comandos críticos: se qualquer um deles falhar, o bot NÃO salva a assinatura como ativa.
+    for (const command of [
+      `ftbranks add ${nick} ${vip.rank}`,
+      `darpontosvip ${nick} ${points}`
+    ]) {
       const result = await rcon.send(command);
       results.push({ command, result });
     }
 
+    // Salva a assinatura logo após rank + pontos funcionarem.
+    // Aviso no chat é opcional e não pode impedir o controle dos 30 dias.
     const subscription = upsertVipSubscription({ ...compra, points }, nick);
     results.push({ command: "vip_subscription", result: subscription.expiresAt });
+
+    const announceCommand = `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Recebeu ${points} Pontos VIP. Obrigado pelo apoio!","color":"green"}]`;
+    await rcon.send(announceCommand).then((result) => {
+      results.push({ command: "tellraw_announce", result });
+    }).catch((error) => {
+      results.push({ command: "tellraw_announce", error: String(error?.message || error) });
+      console.warn("VIP aplicado, mas não consegui anunciar no chat:", error.message || error);
+    });
+
     return { results, subscription };
   });
 }
@@ -2037,11 +2241,14 @@ const client = new Client({
   ]
 });
 
-client.once("clientReady", () => {
-  startMercadoPagoPolling();
-  startVipExpiryMonitor();
+client.once("clientReady", async () => {
   console.log(`Bot online como ${client.user.tag}`);
   client.user.setActivity("ATM 11 | !loja • !vip");
+
+  await restoreVipSubscriptionsStorage();
+
+  startMercadoPagoPolling();
+  startVipExpiryMonitor();
 
   if (!MP_ACCESS_TOKEN) {
     console.warn("AVISO: MP_ACCESS_TOKEN não configurado. O painel VIP abre, mas não conseguirá gerar Pix.");
@@ -2502,6 +2709,23 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  if (content === `${PREFIX}vipsync`) {
+    if (!canManageVip(message)) {
+      await message.reply("❌ Você não tem permissão para sincronizar VIPs.");
+      return;
+    }
+
+    await message.reply("🔄 Sincronizando assinaturas VIP salvas...");
+    try {
+      await restoreVipSubscriptionsStorage();
+      await message.reply(`✅ Sincronização concluída. VIPs ativos: ${loadVipSubscriptions().filter((sub) => sub.status === "active").length}`);
+    } catch (error) {
+      console.error("Erro no vipsync:", error);
+      await message.reply("❌ Erro ao sincronizar VIPs. Veja o log do bot.");
+    }
+    return;
+  }
+
   if (content === `${PREFIX}vipconfig`) {
     if (!canManageVip(message)) {
       await message.reply("❌ Você não tem permissão para ver a configuração VIP.");
@@ -2525,6 +2749,8 @@ client.on("messageCreate", async (message) => {
       `VIP_PANEL_CHANNEL_ID: ${VIP_PANEL_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_CATEGORY_ID: ${VIP_CATEGORY_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_LOG_CHANNEL_ID: ${VIP_LOG_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `VIP_STORAGE_CHANNEL_ID: ${VIP_STORAGE_CHANNEL_ID ? "✅ configurado" : "⚠️ usando apenas arquivo local"}`,
+      `Arquivo de assinaturas: data/vip_assinaturas.json`,
       `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
       `Entrega Minecraft: FTB Ranks + /darpontosvip, sem tag antigo e sem scoreboard direto`,
       `Jogador online para entrega: ✅ necessário para aplicar Pontos VIP via /darpontosvip`,
