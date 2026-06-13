@@ -103,6 +103,10 @@ function stripMinecraftFormatting(text) {
   return String(text || "").replace(/§[0-9A-FK-OR]/gi, "");
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function parseOnlinePlayersFromList(output) {
   const clean = stripMinecraftFormatting(output);
   const colonIndex = clean.indexOf(":");
@@ -115,15 +119,58 @@ function parseOnlinePlayersFromList(output) {
 }
 
 function isNickInOnlineList(players, nick) {
-  const wanted = String(nick || "").trim().toLowerCase();
+  const wantedRaw = String(nick || "").trim();
+  const wanted = wantedRaw.toLowerCase();
   if (!wanted) return false;
-  return Array.isArray(players) && players.some((player) => String(player || "").trim().toLowerCase() === wanted);
+
+  const exactNickRegex = new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(wantedRaw)}([^A-Za-z0-9_]|$)`, "i");
+
+  return Array.isArray(players) && players.some((player) => {
+    const clean = stripMinecraftFormatting(player).trim();
+    if (!clean) return false;
+
+    // Alguns servidores/mods colocam prefixos no /list, por exemplo:
+    // "[◆ Membro ◆] AndersonAriel". A checagem precisa procurar só o nick puro.
+    if (clean.toLowerCase() === wanted) return true;
+    return exactNickRegex.test(clean);
+  });
+}
+
+function looksLikeOfflinePlayerResult(output) {
+  const clean = stripMinecraftFormatting(output).toLowerCase();
+  return (
+    clean.includes("no entity was found") ||
+    clean.includes("no player was found") ||
+    clean.includes("found no elements") ||
+    clean.includes("test failed") ||
+    clean.includes("unknown or incomplete command") ||
+    clean.includes("não foi encontrado") ||
+    clean.includes("nenhum")
+  );
 }
 
 async function isPlayerOnlineByList(rcon, nick) {
+  const wantedRaw = String(nick || "").trim();
+  if (!isValidMinecraftNick(wantedRaw)) return false;
+
+  // Checagem principal: consulta a entidade online pelo nick exato.
+  // Isso evita confundir prefixos/tags do chat ou nomes decorados do FTB Ranks.
+  try {
+    const output = await rcon.send(`data get entity ${wantedRaw} UUID`);
+    const clean = stripMinecraftFormatting(output);
+
+    if (!looksLikeOfflinePlayerResult(clean)) {
+      const nickRegex = new RegExp(`(^|[^A-Za-z0-9_])${escapeRegExp(wantedRaw)}([^A-Za-z0-9_]|$)`, "i");
+      if (nickRegex.test(clean) || clean.toLowerCase().includes("uuid")) return true;
+    }
+  } catch {
+    // Se algum servidor bloquear o data get, cai no fallback do /list abaixo.
+  }
+
+  // Fallback: usa /list, mas ainda procurando o nick puro dentro de entradas com prefixo.
   const output = await rcon.send("list");
   const players = parseOnlinePlayersFromList(output);
-  return isNickInOnlineList(players, nick);
+  return isNickInOnlineList(players, wantedRaw);
 }
 
 function parseScoreholders(output) {
@@ -1314,13 +1361,13 @@ function createVipNeedsOnlineEmbed(compra, nick) {
   return baseEmbed(
     "⚠️ Entre no servidor para receber o VIP",
     [
-      "Seu pagamento já está aprovado, mas o bot não encontrou esse nick online no servidor.",
+      "Seu pagamento já está aprovado, mas o bot não encontrou esse nick puro online no servidor.",
       "",
       `**Nick informado:** ${nick}`,
       `**VIP:** ${compra.vip.name}`,
       `**Pontos VIP:** ${compra.points}`,
       "",
-      "Entre no servidor com esse nick e clique em **Tentar receber novamente**.",
+      "Entre no servidor com exatamente esse nick e clique em **Tentar receber novamente**.",
       "Se o nick estiver errado, clique em **Editar nick** e corrija.",
       "",
       "Este ticket continuará aberto enquanto o VIP estiver aguardando entrega."
@@ -1336,7 +1383,7 @@ function createVipNickSavedEmbed(compra) {
       `Nick configurado: **${compra.minecraftNick}**`,
       "",
       "Agora entre no servidor com esse nick e clique em **Receber VIP agora**.",
-      "O bot vai verificar se você está online antes de aplicar o VIP."
+      "O bot vai verificar somente o nick puro, sem prefixo/tag do chat, antes de aplicar o VIP."
     ].join("\n"),
     0x57f287
   );
@@ -1355,11 +1402,11 @@ function createVipTicketExpiredEmbed(compra) {
   );
 }
 
-function createVipDeliveryActionRow(compraId) {
+function createVipDeliveryActionRow(compraId, retry = false) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`vip_receive_now:${compraId}`)
-      .setLabel("Receber VIP agora")
+      .setLabel(retry ? "Tentar receber novamente" : "Receber VIP agora")
       .setStyle(ButtonStyle.Success)
       .setEmoji("🎁"),
     new ButtonBuilder()
@@ -1380,10 +1427,15 @@ function createVipNickModal(compra) {
     .setLabel("Nick exato do Minecraft")
     .setStyle(TextInputStyle.Short)
     .setPlaceholder("Exemplo: AndersonAriel")
-    .setValue(compra.minecraftNick || "")
     .setRequired(true)
     .setMinLength(3)
     .setMaxLength(16);
+
+  // Discord não aceita setValue("") em modal.
+  // Se ainda não existe nick salvo, o campo abre vazio para o player preencher.
+  if (compra.minecraftNick) {
+    nickInput.setValue(compra.minecraftNick);
+  }
 
   modal.addComponents(new ActionRowBuilder().addComponents(nickInput));
   return modal;
@@ -1503,7 +1555,7 @@ async function handleReceiveVipNowInteraction(interaction, compraId) {
 
       await interaction.editReply({
         embeds: [createVipNeedsOnlineEmbed(compra, compra.minecraftNick)],
-        components: [createVipDeliveryActionRow(compra.id)]
+        components: [createVipDeliveryActionRow(compra.id, true)]
       });
 
       await notifyVipLog(compra, `⚠️ VIP aguardando jogador online: ${compra.minecraftNick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
@@ -2459,6 +2511,7 @@ client.on("messageCreate", async (message) => {
       `Entrega Minecraft: FTB Ranks + /darpontosvip, sem tag antigo e sem scoreboard direto`,
       `Jogador online para entrega: ✅ necessário para aplicar Pontos VIP via /darpontosvip`,
       `Botão de entrega: ✅ Receber VIP agora + Informar/editar nick`,
+      `Verificação online: ✅ nick puro/exato, sem prefixo ou tag`,
       `Fechamento automático sem pagamento: ✅ ${VIP_TICKET_AUTO_CLOSE_MINUTES}min`,
       `Ticket aprovado aguardando entrega: ✅ não fecha automaticamente`,
       `Duração do VIP: ${VIP_DURATION_DAYS} dias`,
