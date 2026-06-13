@@ -30,10 +30,10 @@ const VIP_LOG_CHANNEL_ID = process.env.VIP_LOG_CHANNEL_ID || "";
 const VIP_STAFF_ROLE_ID = process.env.VIP_STAFF_ROLE_ID || "";
 
 const vipRanges = [
-  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip_ferro", tag: "vip_ferro", rewardText: "2 pontos a cada 5 horas online" },
-  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip_ouro", tag: "vip_ouro", rewardText: "3 pontos a cada 5 horas online" },
-  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip_diamante", tag: "vip_diamante", rewardText: "5 pontos a cada 5 horas online" },
-  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip_netherita", tag: "vip_netherita", rewardText: "8 pontos a cada 5 horas online" }
+  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip_ferro", tag: "vip_ferro", rewardText: "2 Pontos VIP a cada 5 horas online" },
+  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip_ouro", tag: "vip_ouro", rewardText: "3 Pontos VIP a cada 5 horas online" },
+  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip_diamante", tag: "vip_diamante", rewardText: "5 Pontos VIP a cada 5 horas online" },
+  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip_netherita", tag: "vip_netherita", rewardText: "8 Pontos VIP a cada 5 horas online" }
 ];
 
 
@@ -210,9 +210,13 @@ function buildRegrasEmbed() {
 
 function buildVipEmbed() {
   return baseEmbed(
-    "🏷️ Sistema de VIPs ATM 11",
+    "💎 Sistema de VIPs ATM 11",
     [
-      "Ao apoiar o servidor, o jogador recebe o VIP correspondente à faixa de doação e benefícios extras dentro do servidor.",
+      "Ao apoiar o servidor, você recebe o VIP correspondente à faixa de doação e ganha **Pontos VIP** para usar na loja do jogo.",
+      "",
+      "📌 **Comandos úteis dentro do servidor:**",
+      "• `/loja` — abre a loja visual de kits",
+      "• `/recompensa` — mostra o tempo restante para a próxima recompensa online",
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
       "⚒️ **VIP Ferro** — Doações de **R$5 a R$10**",
@@ -223,7 +227,7 @@ function buildVipEmbed() {
       "↩️ /back: **5 minutos**",
       "🌍 /spawn: **instantâneo**",
       "🎲 /rtp: **30 minutos**",
-      "🎁 Recompensa online: **2 pontos a cada 5 horas online**",
+      "🎁 Recompensa online: **2 Pontos VIP a cada 5 horas online**",
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
       "🟡 **VIP Ouro** — Doações de **R$11 a R$20**",
@@ -234,7 +238,7 @@ function buildVipEmbed() {
       "↩️ /back: **1 minuto**",
       "🌍 /spawn: **instantâneo**",
       "🎲 /rtp: **15 minutos**",
-      "🎁 Recompensa online: **3 pontos a cada 5 horas online**",
+      "🎁 Recompensa online: **3 Pontos VIP a cada 5 horas online**",
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
       "💎 **VIP Diamante** — Doações de **R$21 a R$30**",
@@ -245,10 +249,10 @@ function buildVipEmbed() {
       "↩️ /back: **30 segundos**",
       "🌍 /spawn: **instantâneo**",
       "🎲 /rtp: **5 minutos**",
-      "🎁 Recompensa online: **5 pontos a cada 5 horas online**",
+      "🎁 Recompensa online: **5 Pontos VIP a cada 5 horas online**",
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
-      "🔥 **VIP Netherita** — Doações de **R$31 a R$50**",
+      "🔥 **VIP Netherita** — Doações de **R$31 ou mais**",
       "🧱 Claims: **500 chunks**",
       "⚡ Force load: **120 chunks**",
       "🏠 Homes: **50 homes**",
@@ -256,11 +260,12 @@ function buildVipEmbed() {
       "↩️ /back: **instantâneo**",
       "🌍 /spawn: **instantâneo**",
       "🎲 /rtp: **instantâneo**",
-      "🎁 Recompensa online: **8 pontos a cada 5 horas online**",
+      "🎁 Recompensa online: **8 Pontos VIP a cada 5 horas online**",
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
-      "📌 Os pontos podem ser usados na loja do spawn para comprar kits e recompensas.",
-      "🛒 A loja é acessada pela **placa no spawn**."
+      "💰 **Pontos VIP:** cada R$1 aprovado adiciona 1 Ponto VIP ao seu saldo.",
+      "🛒 Use seus Pontos VIP em `/loja` para comprar kits.",
+      "🔎 Use `/recompensa` para ver quando recebe a próxima recompensa online."
     ].join("\n"),
     0xff9900
   );
@@ -270,46 +275,92 @@ function buildKitsEmbed() {
   return baseEmbed(
     "🛒 Kits da Loja ATM 11",
     [
-      "**Kits iniciais:**",
-      "🍖 Comida — `1 ponto`",
-      "⛏️ Mineração Ferro — `2 pontos`",
-      "💎 Mineração Diamante — `4 pontos`",
-      "🛠️ Mineração Netherita — `8 pontos`",
-      "🧪 Poção — `2 pontos`",
+      "Use `/loja` no servidor para abrir a loja visual.",
+      "Antes de comprar, clique em **Ver itens do kit** para conferir tudo.",
       "",
-      "**Tecnologia e utilidades:**",
-      "💠 AE2 Básico — `5 pontos`",
-      "🌌 AE2 Avançado — `30 pontos`",
-      "🧭 Waystones — `2 pontos`",
-      "🎒 Mochila Ferro — `2 pontos`",
-      "🎒 Mochila Diamante — `8 pontos`",
-      "📦 Sophisticated Storage — `10 pontos`",
-      "🌀 Dimensional Storage — `10 pontos`",
-      "🏘️ Easy Villagers — `6 pontos`",
-      "🏘️ Easy Villagers Premium — `15 pontos`",
+      "**🧰 Kits Básicos**",
+      "• Comida — `1 PV`",
+      "• Mineração [Ferro] — `2 PV`",
+      "• Mineração [Diamante] — `4 PV`",
+      "• Mineração [Netherita] — `8 PV`",
+      "• Poção — `2 PV`",
+      "• Viagem [Waystones] — `2 PV`",
       "",
-      "**Avançados:**",
-      "🏗️ Building Gadgets — `10 pontos`",
-      "⚡ Powah Niotic — `15 pontos`",
-      "⚡ Powah Nitro — `30 pontos`",
-      "💾 Refined Storage Básico — `20 pontos`",
-      "💾 Refined Storage Avançado — `30 pontos`",
-      "🌱 Mystical Agriculture — `20 pontos`",
+      "**💠 Applied Energistics 2**",
+      "• AE2 [Básico] — `5 PV`",
+      "• AE2 [Avançado] — `30 PV`",
+      "• Advanced AE [Armadura AE] — `40 PV`",
+      "• Advanced AE [Super Processador] — `50 PV`",
       "",
-      "**AllTheModium:**",
-      "✨ AllTheModium Ferramentas — `20 pontos`",
-      "🛡️ AllTheModium Armadura — `30 pontos`",
-      "💜 Vibranium Ferramentas — `25 pontos`",
-      "🛡️ Vibranium Armadura — `35 pontos`",
-      "🌌 Unobtainium Ferramentas — `30 pontos`",
-      "🛡️ Unobtainium Armadura — `40 pontos`",
+      "**🎒 Armazenamento e Mochilas**",
+      "• Mochila [Ferro] — `2 PV`",
+      "• Mochila [Diamante] — `8 PV`",
+      "• Armazenamento [Sophisticated] — `10 PV`",
+      "• Dimensional Storage — `2 PV`",
       "",
-      "A loja fica no **spawn** e o acesso é pela **placa da loja**."
+      "**🏘️ Easy Villagers**",
+      "• Aldeões [Easy Villagers] — `2 PV`",
+      "• Aldeões [Premium] — `8 PV`",
+      "",
+      "**⚙️ Tecnologia e Modpack**",
+      "• Construção [Building Gadgets] — `10 PV`",
+      "• Energia [Powah Niotic] — `10 PV`",
+      "• Energia [Powah Nitro] — `20 PV`",
+      "• Refined Storage [Básico] — `5 PV`",
+      "• Refined Storage [Avançado] — `15 PV`",
+      "• Mystical Agriculture [Início] — `5 PV`",
+      "• Occultism [Giz] — `30 PV`",
+      "• Occultism [Minérios Infinitos] — `40 PV`",
+      "• Occultism [Minérios Infinitos com Encantamentos] — `60 PV`",
+      "• Apotheosis [Mesa e Estantes] — `25 PV`",
+      "• Apotheosis [Mesa Configurável] — `20 PV`",
+      "• Mystical Agriculture [Sementes de Minérios] — `5 PV`",
+      "• Mystical Agriculture [Armadura Supremium + Aprimoramentos V] — `30 PV`",
+      "• Just Dire Things [Gosma VoidShimmer] — `5 PV`",
+      "• Just Dire Things [Gosma Shadowpulse] — `10 PV`",
+      "• Just Dire Things [Coletor/Transmissor/Depósito] — `3 PV`",
+      "• Just Dire Things [Máquinas] — `3 PV`",
+      "• Just Dire Things [Varinha do Tempo] — `15 PV`",
+      "• Just Dire Things [Arma + Ferramentas] — `15 PV`",
+      "• Just Dire Things [Armadura] — `10 PV`",
+      "• Just Dire Things [Todos os Aprimoramentos] — `50 PV`",
+      "• Productive Bees [Básico] — `10 PV`",
+      "• Productive Bees [Avançado] — `10 PV`",
+      "",
+      "**✨ AllTheModium**",
+      "• AllTheModium [Ferramentas] — `20 PV`",
+      "• AllTheModium [Armadura] — `30 PV`",
+      "• Vibranium [Ferramentas] — `25 PV`",
+      "• Vibranium [Armadura] — `35 PV`",
+      "• Unobtainium [Ferramentas] — `30 PV`",
+      "• Unobtainium [Armadura] — `40 PV`",
+      "• AllTheModium [Armas de Liga] — `50 PV`",
+      ""
     ].join("\n"),
     0x22cc66
   );
 }
 
+
+function buildLojaEmbed() {
+  return baseEmbed(
+    "🛒 Loja ATM11 no Servidor",
+    [
+      "A loja nova é aberta **dentro do Minecraft** pelo comando:",
+      "",
+      "`/loja`",
+      "",
+      "Na loja você encontra categorias organizadas, kits com ícones dos mods e uma tela para visualizar os itens antes de comprar.",
+      "",
+      "💰 **Moeda usada:** Pontos VIP",
+      "🎁 **Recompensa online:** veja com `/recompensa`",
+      "🔎 **Antes de comprar:** clique em **Ver itens do kit** para conferir todos os itens e quantidades.",
+      "",
+      "Use `!kits` aqui no Discord para ver a lista de kits e preços."
+    ].join("\n"),
+    0x22cc66
+  );
+}
 
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -661,7 +712,12 @@ function buildComandosEmbed() {
       `\`${PREFIX}discord\` — link do Discord`,
       `\`${PREFIX}regras\` — regras do servidor`,
       `\`${PREFIX}vip\` — benefícios dos VIPs`,
-      `\`${PREFIX}kits\` — kits da loja`,
+      `\`${PREFIX}loja\` — como usar a loja no jogo`,
+      `\`${PREFIX}kits\` — kits da loja e preços`,
+      "",
+      "**Comandos dentro do Minecraft:**",
+      "`/loja` — abre a loja visual",
+      "`/recompensa` — mostra o tempo da próxima recompensa online",
       "",
       "**Servidor:**",
       `\`${PREFIX}status\` — status do servidor`,
@@ -687,7 +743,8 @@ function buildComandosEmbed() {
       `\`${PREFIX}sortear\``,
       `\`${PREFIX}cancelarsorteio\``,
       `\`${PREFIX}finalizarsorteio\``,
-      `\`${PREFIX}vipsetup\` — criar painel VIP`
+      `\`${PREFIX}vipsetup\` — criar painel VIP`,
+      `\`${PREFIX}vipconfig\` — conferir configuração VIP/Mercado Pago`
     ].join("\n"),
     0x8a2be2
   );
@@ -759,11 +816,11 @@ function canManageVip(messageOrInteraction) {
 
 function createVipPanelEmbed() {
   return baseEmbed(
-    "💎 Loja VIP ATM 11",
+    "💎 Comprar VIP • ATM 11",
     [
       "Escolha abaixo a faixa de VIP que deseja comprar ou apoiar.",
       "",
-      "Depois da escolha, o bot vai abrir um **ticket privado de compra** e gerar o **Pix / QR Code** automaticamente pelo Mercado Pago.",
+      "Depois da escolha, o bot abre um **ticket privado de compra** e gera o **Pix / QR Code** automaticamente pelo Mercado Pago.",
       "",
       "**Faixas disponíveis:**",
       "⚒️ **VIP Ferro** — Doação de **R$5 a R$10**",
@@ -771,8 +828,10 @@ function createVipPanelEmbed() {
       "💎 **VIP Diamante** — Doação de **R$21 a R$30**",
       "🔥 **VIP Netherita** — Doação de **R$31 ou mais**",
       "",
-      "📌 **Cada R$1 doado = 1 ponto de doação.**",
-      "✅ Após o pagamento aprovado, você envia o nick exato do Minecraft e o bot entrega o VIP automaticamente.",
+      "💰 **Cada R$1 aprovado = 1 Ponto VIP.**",
+      "🛒 Os Pontos VIP podem ser usados no jogo com `/loja`.",
+      "⏰ Use `/recompensa` no jogo para ver sua próxima recompensa online.",
+      "✅ Após o pagamento aprovado, envie seu nick exato do Minecraft e o bot aplica seu VIP automaticamente.",
       "🗑️ Quando a compra terminar, o ticket poderá ser fechado pelo botão."
     ].join("\n"),
     0xff9900
@@ -786,7 +845,7 @@ function createVipSelectRow() {
     .addOptions(vipRanges.map((vip) => ({
       label: `${vip.name} (${formatMoney(vip.min)}${vip.max >= 9999 ? "+" : ` a ${formatMoney(vip.max)}`})`,
       value: vip.key,
-      description: `${vip.rewardText} • 1 real = 1 ponto`,
+      description: `${vip.rewardText} • 1 real = 1 Ponto VIP`,
       emoji: vip.emoji
     })));
   return new ActionRowBuilder().addComponents(select);
@@ -821,7 +880,7 @@ function createVipTicketIntroEmbed(user, vip, amount) {
       "**Resumo da compra:**",
       `• VIP escolhido: **${vip.name}**`,
       `• Valor escolhido: **${formatMoney(amount)}**`,
-      `• Pontos de doação: **${Math.floor(amount)}**`,
+      `• Pontos VIP: **${Math.floor(amount)}**`,
       `• Recompensa online: **${vip.rewardText}**`,
       "",
       "⏳ Aguarde um instante enquanto gero o Pix / QR Code do Mercado Pago..."
@@ -838,7 +897,7 @@ function createVipPixGeneratedEmbed(vip, amount, qrCode) {
       "",
       `**VIP:** ${vip.name}`,
       `**Valor:** ${formatMoney(amount)}`,
-      `**Pontos de doação:** ${Math.floor(amount)}`,
+      `**Pontos VIP:** ${Math.floor(amount)}`,
       "",
       "📷 Escaneie o QR Code abaixo ou use o Pix copia e cola.",
       "",
@@ -858,7 +917,7 @@ function createVipApprovedEmbed(compra) {
       "",
       `**VIP:** ${compra.vip.name}`,
       `**Valor pago:** ${formatMoney(compra.amount)}`,
-      `**Pontos de doação:** ${compra.points}`,
+      `**Pontos VIP:** ${compra.points}`,
       "",
       "Agora envie seu nick exato do Minecraft usando:",
       `\`${PREFIX}nick SeuNick\``,
@@ -878,8 +937,10 @@ function createVipDeliveredEmbed(compra, nick) {
       "",
       `**Nick:** ${nick}`,
       `**VIP:** ${compra.vip.name}`,
-      `**Pontos adicionados:** ${compra.points}`,
+      `**Pontos VIP adicionados:** ${compra.points}`,
       `**Recompensa online:** ${compra.vip.rewardText}`,
+      "",
+      "Dentro do jogo, use `/loja` para gastar seus Pontos VIP e `/recompensa` para ver sua próxima recompensa online.",
       "",
       "Obrigado por apoiar o servidor! ❤️"
     ].join("\n"),
@@ -1162,7 +1223,7 @@ async function applyVipToMinecraft(compra, nick) {
       `ftbranks add ${nick} ${vip.rank}`,
       `tag ${nick} add ${vip.tag}`,
       `scoreboard players add ${nick} vip_pontos ${points}`,
-      `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Obrigado pelo apoio!","color":"green"}]`
+      `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Recebeu ${points} Pontos VIP. Obrigado pelo apoio!","color":"green"}]`
     ];
     const results = [];
     for (const command of commands) {
@@ -1220,6 +1281,7 @@ async function startVipPurchaseFromModal(interaction, vip, amount) {
       "",
       `VIP: **${vip.name}**`,
       `Valor: **${formatMoney(amount)}**`,
+      `Pontos VIP: **${Math.floor(amount)}**`,
       "",
       "Pague usando o QR Code abaixo ou o Pix copia e cola.",
       "",
@@ -1300,7 +1362,7 @@ const client = new Client({
 client.once("clientReady", () => {
   startMercadoPagoPolling();
   console.log(`Bot online como ${client.user.tag}`);
-  client.user.setActivity("ATM 11 | !rank");
+  client.user.setActivity("ATM 11 | !loja • !vip");
 
   if (!MP_ACCESS_TOKEN) {
     console.warn("AVISO: MP_ACCESS_TOKEN não configurado. O painel VIP abre, mas não conseguirá gerar Pix.");
@@ -1435,6 +1497,11 @@ client.on("messageCreate", async (message) => {
 
   if (content === `${PREFIX}kits`) {
     await message.reply({ embeds: [buildKitsEmbed()] });
+    return;
+  }
+
+  if (content === `${PREFIX}loja`) {
+    await message.reply({ embeds: [buildLojaEmbed()] });
     return;
   }
 

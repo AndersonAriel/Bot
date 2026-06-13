@@ -1,7 +1,7 @@
 {
   "name": "atm11-rank-bot",
-  "version": "1.0.0",
-  "description": "Bot Discord para rankings do servidor ATM 11 usando RCON",
+  "version": "1.1.0-atm11shop-2a30",
+  "description": "Bot Discord do servidor ATM 11 com rankings, VIP Mercado Pago, Pontos VIP e informações da Loja ATM11",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"
@@ -10,10 +10,10 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "discord.js": "^14.16.3",
-    "dotenv": "^16.4.7",
-    "rcon-client": "^4.2.5",
-    "express": "^4.19.2"
+    "discord.js": "14.16.3",
+    "dotenv": "16.4.7",
+    "rcon-client": "4.2.5",
+    "express": "4.21.2"
   },
   "license": "MIT"
 }
