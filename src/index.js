@@ -29,6 +29,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const VIP_DURATION_DAYS = Math.max(1, Number(process.env.VIP_DURATION_DAYS || 30));
 const VIP_EXPIRY_CHECK_INTERVAL_MINUTES = Math.max(5, Number(process.env.VIP_EXPIRY_CHECK_INTERVAL_MINUTES || 60));
 const VIP_WARNING_DAYS = [5, 4, 3, 2, 1];
+const VIP_TICKET_AUTO_CLOSE_MINUTES = Math.max(1, Number(process.env.VIP_TICKET_AUTO_CLOSE_MINUTES || 10));
+const VIP_UNPAID_STATUSES = new Set(["criando_pagamento", "aguardando_pagamento", "erro_pagamento"]);
+const VIP_DELIVERY_PENDING_STATUSES = new Set(["pagamento_aprovado", "nick_informado", "aguardando_entrega", "erro_entrega"]);
 
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || "";
 const MP_POLL_INTERVAL_SECONDS = Number(process.env.MP_POLL_INTERVAL_SECONDS || 20);
@@ -1183,7 +1186,8 @@ function createVipPanelEmbed() {
       "🛒 Os Pontos VIP podem ser usados no jogo com `/loja`.",
       "⏰ Use `/recompensa` no jogo para ver sua próxima recompensa online.",
       `✅ O VIP fica ativo por **${VIP_DURATION_DAYS} dias** após a entrega.`,
-      "✅ Após o pagamento aprovado, envie seu nick exato do Minecraft e o bot aplica seu VIP automaticamente.",
+      "✅ Após o pagamento aprovado, informe seu nick, entre no servidor e clique em **Receber VIP agora**.",
+      "⚠️ O jogador precisa estar online para receber o VIP e os Pontos VIP.",
       "🗑️ Quando a compra terminar, o ticket poderá ser fechado pelo botão."
     ].join("\n"),
     0xff9900
@@ -1274,11 +1278,12 @@ function createVipApprovedEmbed(compra) {
       `**Pontos VIP:** ${compra.points}`,
       `**Duração do VIP:** ${VIP_DURATION_DAYS} dias após a entrega`,
       "",
-      "Agora envie seu nick exato do Minecraft usando:",
+      "⚠️ **Para receber o VIP, você precisa estar online no servidor Minecraft.**",
+      "",
+      "Agora informe seu nick exato usando o botão **Informar/editar nick** ou o comando:",
       `\`${PREFIX}nick SeuNick\``,
       "",
-      "**Exemplo:**",
-      `\`${PREFIX}nick AndersonAriel\``
+      "Depois clique em **Receber VIP agora**. Se você estiver offline, o bot vai manter o ticket aberto para você tentar novamente."
     ].join("\n"),
     0x57f287
   );
@@ -1309,19 +1314,213 @@ function createVipNeedsOnlineEmbed(compra, nick) {
   return baseEmbed(
     "⚠️ Entre no servidor para receber o VIP",
     [
-      "Seu pagamento já está aprovado, mas para aplicar o VIP com segurança o personagem precisa estar online no servidor.",
+      "Seu pagamento já está aprovado, mas o bot não encontrou esse nick online no servidor.",
       "",
       `**Nick informado:** ${nick}`,
       `**VIP:** ${compra.vip.name}`,
       `**Pontos VIP:** ${compra.points}`,
       "",
-      "Entre no servidor com esse nick e envie novamente:",
-      `\`${PREFIX}nick ${nick}\``,
+      "Entre no servidor com esse nick e clique em **Tentar receber novamente**.",
+      "Se o nick estiver errado, clique em **Editar nick** e corrija.",
       "",
-      `Assim o bot aplica o rank por ${VIP_DURATION_DAYS} dias pelo FTB Ranks e adiciona os Pontos VIP pelo comando oficial da loja.`
+      "Este ticket continuará aberto enquanto o VIP estiver aguardando entrega."
     ].join("\n"),
     0xfee75c
   );
+}
+
+function createVipNickSavedEmbed(compra) {
+  return baseEmbed(
+    "✅ Nick salvo",
+    [
+      `Nick configurado: **${compra.minecraftNick}**`,
+      "",
+      "Agora entre no servidor com esse nick e clique em **Receber VIP agora**.",
+      "O bot vai verificar se você está online antes de aplicar o VIP."
+    ].join("\n"),
+    0x57f287
+  );
+}
+
+function createVipTicketExpiredEmbed(compra) {
+  return baseEmbed(
+    "⏰ Ticket expirado",
+    [
+      "Este ticket ficou 10 minutos sem pagamento aprovado e será fechado automaticamente.",
+      "",
+      "Nenhum VIP foi aplicado e nenhum Ponto VIP foi adicionado por este ticket.",
+      "Se quiser comprar depois, abra uma nova compra no painel VIP."
+    ].join("\n"),
+    0xed4245
+  );
+}
+
+function createVipDeliveryActionRow(compraId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`vip_receive_now:${compraId}`)
+      .setLabel("Receber VIP agora")
+      .setStyle(ButtonStyle.Success)
+      .setEmoji("🎁"),
+    new ButtonBuilder()
+      .setCustomId(`vip_edit_nick:${compraId}`)
+      .setLabel("Informar/editar nick")
+      .setStyle(ButtonStyle.Secondary)
+      .setEmoji("✏️")
+  );
+}
+
+function createVipNickModal(compra) {
+  const modal = new ModalBuilder()
+    .setCustomId(`vip_nick_modal:${compra.id}`)
+    .setTitle("Informar nick do Minecraft");
+
+  const nickInput = new TextInputBuilder()
+    .setCustomId("minecraft_nick")
+    .setLabel("Nick exato do Minecraft")
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder("Exemplo: AndersonAriel")
+    .setValue(compra.minecraftNick || "")
+    .setRequired(true)
+    .setMinLength(3)
+    .setMaxLength(16);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(nickInput));
+  return modal;
+}
+
+function findCompraVipById(compraId) {
+  return loadComprasVip().find((item) => item.id === compraId) || null;
+}
+
+function canUseVipTicketAction(interaction, compra) {
+  return interaction.user.id === compra.discordUserId || canManageVip(interaction);
+}
+
+function saveCompraNick(compra, nick) {
+  compra.minecraftNick = nick;
+  compra.status = "nick_informado";
+  compra.updatedAt = new Date().toISOString();
+  updateCompraVip(compra);
+  return compra;
+}
+
+async function handleVipNickModalSubmit(interaction, compraId) {
+  const compra = findCompraVipById(compraId);
+
+  if (!compra) {
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!canUseVipTicketAction(interaction, compra)) {
+    await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (compra.status === "vip_entregue") {
+    await interaction.reply({ content: "⚠️ Esse VIP já foi entregue.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!VIP_DELIVERY_PENDING_STATUSES.has(compra.status)) {
+    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para informar o nick.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const nick = interaction.fields.getTextInputValue("minecraft_nick").trim();
+
+  if (!isValidMinecraftNick(nick)) {
+    await interaction.reply({ content: "❌ Nick inválido. Use exatamente o nick do Minecraft, com 3 a 16 caracteres, somente letras, números e underline.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  saveCompraNick(compra, nick);
+
+  await interaction.reply({
+    embeds: [createVipNickSavedEmbed(compra)],
+    components: [createVipDeliveryActionRow(compra.id)]
+  });
+}
+
+async function handleReceiveVipNowInteraction(interaction, compraId) {
+  const compra = findCompraVipById(compraId);
+
+  if (!compra) {
+    await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!canUseVipTicketAction(interaction, compra)) {
+    await interaction.reply({ content: "❌ Você não tem permissão para receber este VIP.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (compra.status === "vip_entregue") {
+    await interaction.reply({ content: "✅ Esse VIP já foi entregue.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!VIP_DELIVERY_PENDING_STATUSES.has(compra.status)) {
+    await interaction.reply({ content: "⚠️ O pagamento ainda não está aprovado para entregar o VIP.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!compra.minecraftNick) {
+    await interaction.reply({
+      content: "⚠️ Primeiro informe seu nick pelo botão **Informar/editar nick** ou usando `!nick SeuNick` neste ticket.",
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  compra.status = "aplicando_vip";
+  compra.updatedAt = new Date().toISOString();
+  updateCompraVip(compra);
+
+  await interaction.deferReply();
+  await interaction.editReply({ embeds: [baseEmbed("⏳ Verificando servidor", `Estou verificando se **${compra.minecraftNick}** está online e aplicando o VIP.`, 0xfee75c)] });
+
+  try {
+    const delivery = await applyVipToMinecraft(compra, compra.minecraftNick);
+    compra.status = "vip_entregue";
+    compra.vipStartedAt = delivery.subscription.startedAt || new Date().toISOString();
+    compra.vipExpiresAt = delivery.subscription.expiresAt;
+    compra.updatedAt = new Date().toISOString();
+    updateCompraVip(compra);
+
+    await interaction.editReply({ embeds: [createVipDeliveredEmbed(compra, compra.minecraftNick)], components: [] });
+
+    const channel = await client.channels.fetch(compra.channelId).catch(() => null);
+    if (channel) await offerCloseTicket(channel, compra, "success");
+
+    await notifyVipLog(compra, `🎉 VIP entregue: ${compra.minecraftNick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos | expira em ${formatDateTimeBR(compra.vipExpiresAt)}`);
+  } catch (error) {
+    if (error?.code === "PLAYER_OFFLINE_FOR_VIP_DELIVERY") {
+      compra.status = "aguardando_entrega";
+      compra.updatedAt = new Date().toISOString();
+      updateCompraVip(compra);
+
+      await interaction.editReply({
+        embeds: [createVipNeedsOnlineEmbed(compra, compra.minecraftNick)],
+        components: [createVipDeliveryActionRow(compra.id)]
+      });
+
+      await notifyVipLog(compra, `⚠️ VIP aguardando jogador online: ${compra.minecraftNick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
+      return;
+    }
+
+    compra.status = "erro_entrega";
+    compra.lastDeliveryError = String(error?.message || error);
+    compra.updatedAt = new Date().toISOString();
+    updateCompraVip(compra);
+
+    console.error("Erro ao entregar VIP:", error);
+    await interaction.editReply({
+      content: "❌ Pagamento aprovado, mas houve erro ao aplicar o VIP via RCON. Avise a Staff.",
+      components: [createVipDeliveryActionRow(compra.id)]
+    });
+  }
 }
 
 function createVipErrorEmbed(title, lines) {
@@ -1377,16 +1576,35 @@ async function offerCloseTicket(channel, compra, reason = "manual") {
   }).catch(() => {});
 }
 
-async function scheduleCloseTicketOffer(channel, compra, delayMs = 10 * 60 * 1000) {
+async function scheduleCloseTicketOffer(channel, compra, delayMs = VIP_TICKET_AUTO_CLOSE_MINUTES * 60 * 1000) {
   setTimeout(async () => {
     try {
       const compras = loadComprasVip();
       const current = compras.find((item) => item.id === compra.id);
       if (!current) return;
-      if (["vip_entregue", "ticket_fechado"].includes(current.status)) return;
-      await offerCloseTicket(channel, current, "timeout");
+      if (["vip_entregue", "ticket_fechado", "ticket_expirado_sem_pagamento"].includes(current.status)) return;
+
+      // Só fecha automaticamente ticket sem pagamento aprovado.
+      // Se o pagamento foi aprovado e o player está aguardando entrega, o ticket fica aberto.
+      if (!VIP_UNPAID_STATUSES.has(current.status)) return;
+
+      current.status = "ticket_expirado_sem_pagamento";
+      current.closedAt = new Date().toISOString();
+      current.updatedAt = new Date().toISOString();
+      updateCompraVip(current);
+
+      await channel.send({ embeds: [createVipTicketExpiredEmbed(current)] }).catch(() => {});
+      await notifyVipLog(current, `⏰ Ticket expirado sem pagamento aprovado: ${current.discordTag} | ${current.vip.name} | ${formatMoney(current.amount)}`);
+
+      setTimeout(async () => {
+        try {
+          await channel.delete("Ticket VIP expirado sem pagamento aprovado");
+        } catch (error) {
+          console.error("Erro ao fechar ticket VIP expirado:", error);
+        }
+      }, 5000);
     } catch (error) {
-      console.error("Erro ao agendar botão de fechar ticket:", error);
+      console.error("Erro ao agendar fechamento automático de ticket VIP:", error);
     }
   }, delayMs);
 }
@@ -1405,6 +1623,14 @@ async function handleCloseTicketInteraction(interaction, compraId) {
 
   if (!isOwner && !isStaff) {
     await interaction.reply({ content: "❌ Você não tem permissão para fechar este ticket.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  if (!isStaff && compra.status !== "vip_entregue") {
+    await interaction.reply({
+      content: "⚠️ Este ticket ainda está em processo de entrega. Ele só pode ser fechado pelo player depois que o VIP for entregue com sucesso.",
+      flags: MessageFlags.Ephemeral
+    });
     return;
   }
 
@@ -1559,7 +1785,7 @@ async function sendPurchaseApprovedMessage(compra) {
   try {
     const channel = await client.channels.fetch(compra.channelId);
     if (!channel) return;
-    await channel.send({ embeds: [createVipApprovedEmbed(compra)] });
+    await channel.send({ embeds: [createVipApprovedEmbed(compra)], components: [createVipDeliveryActionRow(compra.id)] });
   } catch (error) {
     console.error("Erro ao enviar mensagem de pagamento aprovado:", error);
   }
@@ -1713,46 +1939,35 @@ async function setNickForApprovedVipPurchase(message, nick) {
     await message.reply("❌ Nick inválido. Use exatamente o nick do Minecraft, com 3 a 16 caracteres, somente letras, números e underline.");
     return;
   }
+
   const compras = loadComprasVip();
   const compra = compras
     .filter((item) => item.discordUserId === message.author.id && item.channelId === message.channel.id)
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))[0];
-  if (!compra) { await message.reply("❌ Não encontrei uma compra VIP sua nesta sala."); return; }
-  if (compra.status !== "pagamento_aprovado") { await message.reply("⚠️ Seu pagamento ainda não foi aprovado. Aguarde a confirmação automática do Mercado Pago."); return; }
-  if (compra.minecraftNick) { await message.reply("⚠️ Esta compra já teve um nick definido e o VIP já foi entregue/processado."); return; }
-  compra.minecraftNick = nick;
-  compra.status = "aplicando_vip";
-  compra.updatedAt = new Date().toISOString();
-  updateCompraVip(compra);
-  await message.reply({ embeds: [baseEmbed("⏳ Aplicando VIP", "Pagamento aprovado. Estou aplicando seu VIP no servidor agora.", 0xfee75c)] });
-  try {
-    const delivery = await applyVipToMinecraft(compra, nick);
-    compra.status = "vip_entregue";
-    compra.vipStartedAt = delivery.subscription.startedAt || new Date().toISOString();
-    compra.vipExpiresAt = delivery.subscription.expiresAt;
-    compra.updatedAt = new Date().toISOString();
-    updateCompraVip(compra);
-    await message.reply({ embeds: [createVipDeliveredEmbed(compra, nick)] });
-    const channel = await client.channels.fetch(compra.channelId).catch(() => null);
-    if (channel) await offerCloseTicket(channel, compra, "success");
-    await notifyVipLog(compra, `🎉 VIP entregue: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos | expira em ${formatDateTimeBR(compra.vipExpiresAt)}`);
-  } catch (error) {
-    console.error(error);
-    if (error?.code === "PLAYER_OFFLINE_FOR_VIP_DELIVERY") {
-      compra.status = "pagamento_aprovado";
-      compra.minecraftNick = null;
-      compra.updatedAt = new Date().toISOString();
-      updateCompraVip(compra);
-      await message.reply({ embeds: [createVipNeedsOnlineEmbed(compra, nick)] });
-      await notifyVipLog(compra, `⚠️ VIP aguardando jogador online: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
-      return;
-    }
-    compra.status = "erro_entrega";
-    compra.updatedAt = new Date().toISOString();
-    updateCompraVip(compra);
-    await message.reply("❌ Pagamento aprovado, mas houve erro ao aplicar o VIP via RCON. Avise a Staff.");
+
+  if (!compra) {
+    await message.reply("❌ Não encontrei uma compra VIP sua nesta sala.");
+    return;
   }
+
+  if (compra.status === "vip_entregue") {
+    await message.reply("✅ Esta compra já foi entregue com sucesso.");
+    return;
+  }
+
+  if (!VIP_DELIVERY_PENDING_STATUSES.has(compra.status)) {
+    await message.reply("⚠️ Seu pagamento ainda não foi aprovado. Aguarde a confirmação automática do Mercado Pago.");
+    return;
+  }
+
+  saveCompraNick(compra, nick);
+
+  await message.reply({
+    embeds: [createVipNickSavedEmbed(compra)],
+    components: [createVipDeliveryActionRow(compra.id)]
+  });
 }
+
 
 const client = new Client({
   intents: [
@@ -1841,6 +2056,36 @@ client.on("interactionCreate", async (interaction) => {
 
       const amount = normalizeAmount(interaction.fields.getTextInputValue("amount"));
       await startVipPurchaseFromModal(interaction, vip, amount);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("vip_receive_now:")) {
+      const compraId = interaction.customId.split(":")[1];
+      await handleReceiveVipNowInteraction(interaction, compraId);
+      return;
+    }
+
+    if (interaction.isButton() && interaction.customId.startsWith("vip_edit_nick:")) {
+      const compraId = interaction.customId.split(":")[1];
+      const compra = findCompraVipById(compraId);
+
+      if (!compra) {
+        await interaction.reply({ content: "⚠️ Não encontrei a compra vinculada a este ticket.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      if (!canUseVipTicketAction(interaction, compra)) {
+        await interaction.reply({ content: "❌ Você não tem permissão para editar este nick.", flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      await interaction.showModal(createVipNickModal(compra));
+      return;
+    }
+
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("vip_nick_modal:")) {
+      const compraId = interaction.customId.split(":")[1];
+      await handleVipNickModalSubmit(interaction, compraId);
       return;
     }
 
@@ -2213,6 +2458,9 @@ client.on("messageCreate", async (message) => {
       `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
       `Entrega Minecraft: FTB Ranks + /darpontosvip, sem tag antigo e sem scoreboard direto`,
       `Jogador online para entrega: ✅ necessário para aplicar Pontos VIP via /darpontosvip`,
+      `Botão de entrega: ✅ Receber VIP agora + Informar/editar nick`,
+      `Fechamento automático sem pagamento: ✅ ${VIP_TICKET_AUTO_CLOSE_MINUTES}min`,
+      `Ticket aprovado aguardando entrega: ✅ não fecha automaticamente`,
       `Duração do VIP: ${VIP_DURATION_DAYS} dias`,
       `Verificador de vencimento: ✅ ativo a cada ${VIP_EXPIRY_CHECK_INTERVAL_MINUTES}min`,
       `Avisos automáticos: faltando ${VIP_WARNING_DAYS.join(", ")} dia(s)`,
