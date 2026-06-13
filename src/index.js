@@ -30,10 +30,10 @@ const VIP_LOG_CHANNEL_ID = process.env.VIP_LOG_CHANNEL_ID || "";
 const VIP_STAFF_ROLE_ID = process.env.VIP_STAFF_ROLE_ID || "";
 
 const vipRanges = [
-  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip_ferro", tag: "vip_ferro", rewardText: "2 Pontos VIP a cada 5 horas online" },
-  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip_ouro", tag: "vip_ouro", rewardText: "3 Pontos VIP a cada 5 horas online" },
-  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip_diamante", tag: "vip_diamante", rewardText: "5 Pontos VIP a cada 5 horas online" },
-  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip_netherita", tag: "vip_netherita", rewardText: "8 Pontos VIP a cada 5 horas online" }
+  { key: "ferro", name: "VIP Ferro", emoji: "⚒️", min: 5, max: 10, rank: "vip_ferro", rewardText: "2 Pontos VIP a cada 5 horas online" },
+  { key: "ouro", name: "VIP Ouro", emoji: "🟡", min: 11, max: 20, rank: "vip_ouro", rewardText: "3 Pontos VIP a cada 5 horas online" },
+  { key: "diamante", name: "VIP Diamante", emoji: "💎", min: 21, max: 30, rank: "vip_diamante", rewardText: "5 Pontos VIP a cada 5 horas online" },
+  { key: "netherita", name: "VIP Netherita", emoji: "🔥", min: 31, max: 9999, rank: "vip_netherita", rewardText: "8 Pontos VIP a cada 5 horas online" }
 ];
 
 
@@ -85,6 +85,27 @@ async function withRcon(callback) {
   } finally {
     await rcon.end();
   }
+}
+
+function stripMinecraftFormatting(text) {
+  return String(text || "").replace(/§[0-9A-FK-OR]/gi, "");
+}
+
+function parseOnlinePlayersFromList(output) {
+  const clean = stripMinecraftFormatting(output);
+  const colonIndex = clean.indexOf(":");
+  if (colonIndex < 0) return [];
+  return clean
+    .slice(colonIndex + 1)
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
+}
+
+async function isPlayerOnlineByList(rcon, nick) {
+  const output = await rcon.send("list");
+  const players = parseOnlinePlayersFromList(output);
+  return players.some((playerName) => playerName.toLowerCase() === String(nick).toLowerCase());
 }
 
 function parseScoreholders(output) {
@@ -948,6 +969,26 @@ function createVipDeliveredEmbed(compra, nick) {
   );
 }
 
+
+function createVipNeedsOnlineEmbed(compra, nick) {
+  return baseEmbed(
+    "⚠️ Entre no servidor para receber o VIP",
+    [
+      "Seu pagamento já está aprovado, mas para aplicar o VIP com segurança o personagem precisa estar online no servidor.",
+      "",
+      `**Nick informado:** ${nick}`,
+      `**VIP:** ${compra.vip.name}`,
+      `**Pontos VIP:** ${compra.points}`,
+      "",
+      "Entre no servidor com esse nick e envie novamente:",
+      `\`${PREFIX}nick ${nick}\``,
+      "",
+      "Assim o bot aplica o rank pelo FTB Ranks e adiciona os Pontos VIP pelo comando oficial da loja."
+    ].join("\n"),
+    0xfee75c
+  );
+}
+
 function createVipErrorEmbed(title, lines) {
   return baseEmbed(title, lines.join("\n"), 0xed4245);
 }
@@ -1219,10 +1260,18 @@ async function applyVipToMinecraft(compra, nick) {
   const points = Math.floor(Number(compra.amount));
   const vip = compra.vip;
   return await withRcon(async (rcon) => {
+    const online = await isPlayerOnlineByList(rcon, nick);
+    if (!online) {
+      const error = new Error(`Jogador ${nick} não está online para receber VIP.`);
+      error.code = "PLAYER_OFFLINE_FOR_VIP_DELIVERY";
+      throw error;
+    }
+
     const commands = [
+      // FTB Ranks já controla o rank, prefixo, permissões, tags/nodes e recompensa online.
       `ftbranks add ${nick} ${vip.rank}`,
-      `tag ${nick} add ${vip.tag}`,
-      `scoreboard players add ${nick} vip_pontos ${points}`,
+      // Pontos VIP pelo comando oficial do sistema novo da loja.
+      `darpontosvip ${nick} ${points}`,
       `tellraw @a [{"text":"✦ ","color":"gold","bold":true},{"text":"${nick}","color":"yellow","bold":true},{"text":" é o mais novo ${vip.name} do servidor! Recebeu ${points} Pontos VIP. Obrigado pelo apoio!","color":"green"}]`
     ];
     const results = [];
@@ -1344,6 +1393,15 @@ async function setNickForApprovedVipPurchase(message, nick) {
     await notifyVipLog(compra, `🎉 VIP entregue: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
   } catch (error) {
     console.error(error);
+    if (error?.code === "PLAYER_OFFLINE_FOR_VIP_DELIVERY") {
+      compra.status = "pagamento_aprovado";
+      compra.minecraftNick = null;
+      compra.updatedAt = new Date().toISOString();
+      updateCompraVip(compra);
+      await message.reply({ embeds: [createVipNeedsOnlineEmbed(compra, nick)] });
+      await notifyVipLog(compra, `⚠️ VIP aguardando jogador online: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
+      return;
+    }
     compra.status = "erro_entrega";
     compra.updatedAt = new Date().toISOString();
     updateCompraVip(compra);
@@ -1757,6 +1815,8 @@ client.on("messageCreate", async (message) => {
       `VIP_CATEGORY_ID: ${VIP_CATEGORY_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_LOG_CHANNEL_ID: ${VIP_LOG_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
+      `Entrega Minecraft: FTB Ranks + /darpontosvip, sem tag antigo e sem scoreboard direto`,
+      `Jogador online para entrega: ✅ necessário na versão atual`,
       "",
       "Obs: mesmo sem webhook configurado, o bot tenta confirmar pagamentos pela API automaticamente."
     ].join("\n"));
