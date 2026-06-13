@@ -8,6 +8,10 @@ const express = require("express");
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CHANNEL_ID = process.env.DISCORD_CHANNEL_ID || "";
+const GENERAL_COMMAND_CHANNEL_ID = process.env.GENERAL_COMMAND_CHANNEL_ID || CHANNEL_ID || "";
+const RANK_COMMAND_CHANNEL_ID = process.env.RANK_COMMAND_CHANNEL_ID || CHANNEL_ID || "";
+const GIVEAWAY_COMMAND_CHANNEL_ID = process.env.GIVEAWAY_COMMAND_CHANNEL_ID || CHANNEL_ID || "";
+const STAFF_COMMAND_CHANNEL_ID = process.env.STAFF_COMMAND_CHANNEL_ID || CHANNEL_ID || "";
 const PREFIX = process.env.PREFIX || "!";
 const TOP_LIMIT = Number(process.env.TOP_LIMIT || 10);
 
@@ -108,7 +112,9 @@ function parseOnlinePlayersFromList(output) {
 }
 
 function isNickInOnlineList(players, nick) {
-  return isNickInOnlineList(players, nick);
+  const wanted = String(nick || "").trim().toLowerCase();
+  if (!wanted) return false;
+  return Array.isArray(players) && players.some((player) => String(player || "").trim().toLowerCase() === wanted);
 }
 
 async function isPlayerOnlineByList(rcon, nick) {
@@ -738,6 +744,13 @@ function buildComandosEmbed() {
   return baseEmbed(
     "🤖 Comandos do Bot ATM 11",
     [
+      "**Canais separados:**",
+      `Comandos gerais: ${formatDiscordChannel(GENERAL_COMMAND_CHANNEL_ID, "canal geral")}`,
+      `Rankings: ${formatDiscordChannel(RANK_COMMAND_CHANNEL_ID, "canal de rankings")}`,
+      `Sorteios/Eventos: ${formatDiscordChannel(GIVEAWAY_COMMAND_CHANNEL_ID, "canal de sorteios")}`,
+      `Compra VIP: ${formatDiscordChannel(VIP_PANEL_CHANNEL_ID, "canal de compra VIP")}`,
+      `Staff: ${formatDiscordChannel(STAFF_COMMAND_CHANNEL_ID, "canal da Staff")}`,
+      "",
       "**Informações:**",
       `\`${PREFIX}ip\` — IP do servidor`,
       `\`${PREFIX}discord\` — link do Discord`,
@@ -1081,6 +1094,74 @@ function canManageVip(messageOrInteraction) {
   if (!member) return false;
   if (member.permissions?.has?.("Administrator") || member.permissions?.has?.("ManageGuild")) return true;
   if (VIP_STAFF_ROLE_ID && member.roles?.cache?.has?.(VIP_STAFF_ROLE_ID)) return true;
+  return false;
+}
+
+const GENERAL_COMMANDS = new Set([
+  "ping", "ip", "discord", "regras", "vip", "kits", "loja", "status", "online", "comandos", "ajuda"
+]);
+
+const RANK_COMMANDS = new Set(["rank"]);
+const GIVEAWAY_COMMANDS = new Set(["evento", "sorteio", "participar"]);
+const VIP_PANEL_COMMANDS = new Set(["comprarvip"]);
+const TICKET_COMMANDS = new Set(["nick"]);
+const STAFF_COMMANDS = new Set([
+  "setevento", "removerevento", "criarsorteio", "sortear", "cancelarsorteio", "finalizarsorteio",
+  "vipsetup", "painelvip", "vipconfig", "vipativos", "vipcheck"
+]);
+
+function getCommandName(content) {
+  if (!String(content || "").startsWith(PREFIX)) return "";
+  return String(content || "").slice(PREFIX.length).trim().split(/\s+/)[0]?.toLowerCase() || "";
+}
+
+function getCommandGroup(commandName) {
+  if (STAFF_COMMANDS.has(commandName)) return "staff";
+  if (RANK_COMMANDS.has(commandName)) return "rank";
+  if (GIVEAWAY_COMMANDS.has(commandName)) return "giveaway";
+  if (VIP_PANEL_COMMANDS.has(commandName)) return "vip_panel";
+  if (TICKET_COMMANDS.has(commandName)) return "ticket";
+  if (GENERAL_COMMANDS.has(commandName)) return "general";
+  return "unknown";
+}
+
+function getChannelIdForCommandGroup(group) {
+  if (group === "staff") return STAFF_COMMAND_CHANNEL_ID;
+  if (group === "rank") return RANK_COMMAND_CHANNEL_ID;
+  if (group === "giveaway") return GIVEAWAY_COMMAND_CHANNEL_ID;
+  if (group === "vip_panel") return VIP_PANEL_CHANNEL_ID;
+  if (group === "general") return GENERAL_COMMAND_CHANNEL_ID;
+  return "";
+}
+
+function getChannelLabelForCommandGroup(group) {
+  if (group === "staff") return "comandos da Staff";
+  if (group === "rank") return "rankings";
+  if (group === "giveaway") return "sorteios/eventos";
+  if (group === "vip_panel") return "compra VIP";
+  if (group === "general") return "comandos gerais";
+  return "canal correto";
+}
+
+function formatDiscordChannel(channelId, fallbackText) {
+  return channelId ? `<#${channelId}>` : fallbackText;
+}
+
+async function enforceCommandChannel(message, group, options = {}) {
+  if (!group || group === "unknown") return true;
+
+  if (group === "ticket") {
+    if (options.isPrivateVipChannel) return true;
+    await message.reply("⚠️ Use esse comando dentro do seu ticket privado de compra VIP.");
+    return false;
+  }
+
+  const targetChannelId = getChannelIdForCommandGroup(group);
+  if (!targetChannelId) return true;
+  if (message.channel.id === targetChannelId) return true;
+
+  const label = getChannelLabelForCommandGroup(group);
+  await message.reply(`⚠️ Este comando deve ser usado no canal de **${label}**: ${formatDiscordChannel(targetChannelId, label)}.`);
   return false;
 }
 
@@ -1787,11 +1868,13 @@ client.on("messageCreate", async (message) => {
   if (message.author.bot) return;
 
   const content = message.content.trim();
-  const isVipRelatedCommand = content === `${PREFIX}comprarvip` || content === `${PREFIX}vipsetup` || content === `${PREFIX}painelvip` || content.startsWith(`${PREFIX}nick `);
-  const isVipPanelChannel = VIP_PANEL_CHANNEL_ID && message.channel.id === VIP_PANEL_CHANNEL_ID;
+  if (!content.startsWith(PREFIX)) return;
+
+  const commandName = getCommandName(content);
+  const commandGroup = getCommandGroup(commandName);
   const isPrivateVipChannel = message.channel.name?.startsWith("ticket-compra-");
 
-  if (CHANNEL_ID && message.channel.id !== CHANNEL_ID && !(isVipRelatedCommand && (isVipPanelChannel || isPrivateVipChannel))) return;
+  if (!(await enforceCommandChannel(message, commandGroup, { isPrivateVipChannel }))) return;
 
   if (content === `${PREFIX}ping`) {
     await message.reply("🏓 Pong!");
@@ -2035,12 +2118,25 @@ client.on("messageCreate", async (message) => {
       await message.reply("❌ Você não tem permissão para criar o painel VIP.");
       return;
     }
-    if (VIP_PANEL_CHANNEL_ID && message.channel.id !== VIP_PANEL_CHANNEL_ID) {
-      await message.reply("⚠️ O painel VIP deve ser criado no canal configurado em VIP_PANEL_CHANNEL_ID.");
+
+    let targetChannel = message.channel;
+    if (VIP_PANEL_CHANNEL_ID) {
+      try {
+        targetChannel = await client.channels.fetch(VIP_PANEL_CHANNEL_ID);
+      } catch (error) {
+        console.error("Erro ao buscar VIP_PANEL_CHANNEL_ID:", error);
+        await message.reply("❌ Não consegui encontrar o canal configurado em VIP_PANEL_CHANNEL_ID.");
+        return;
+      }
+    }
+
+    if (!targetChannel?.send) {
+      await message.reply("❌ O canal do painel VIP não permite envio de mensagens pelo bot.");
       return;
     }
-    await message.channel.send({ embeds: [createVipPanelEmbed()], components: [createVipSelectRow()] });
-    await message.reply("✅ Painel VIP criado com sucesso.");
+
+    await targetChannel.send({ embeds: [createVipPanelEmbed()], components: [createVipSelectRow()] });
+    await message.reply(`✅ Painel VIP criado com sucesso em ${formatDiscordChannel(targetChannel.id, "canal VIP")}.`);
     await safeDeleteMessage(message);
     return;
   }
@@ -2107,6 +2203,10 @@ client.on("messageCreate", async (message) => {
       `Webhook usado pelo bot: ${notificationUrl ? `\`${notificationUrl}\`` : "⚠️ inválido ou desativado"}`,
       `${PUBLIC_URL && !String(PUBLIC_URL).startsWith("https://") && !String(PUBLIC_URL).startsWith("http://") ? "ℹ️ PUBLIC_URL corrigida automaticamente com https://" : ""}`,
       `MP_PAYER_EMAIL: ${process.env.MP_PAYER_EMAIL ? "✅ configurado" : "⚠️ usando e-mail técnico automático"}`,
+      `GENERAL_COMMAND_CHANNEL_ID: ${GENERAL_COMMAND_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `RANK_COMMAND_CHANNEL_ID: ${RANK_COMMAND_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `GIVEAWAY_COMMAND_CHANNEL_ID: ${GIVEAWAY_COMMAND_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
+      `STAFF_COMMAND_CHANNEL_ID: ${STAFF_COMMAND_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_PANEL_CHANNEL_ID: ${VIP_PANEL_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_CATEGORY_ID: ${VIP_CATEGORY_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `VIP_LOG_CHANNEL_ID: ${VIP_LOG_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
