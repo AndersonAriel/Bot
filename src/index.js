@@ -20,6 +20,11 @@ const EVENT_FILE = path.join(DATA_DIR, "evento.json");
 const GIVEAWAY_FILE = path.join(DATA_DIR, "sorteio.json");
 
 const PURCHASES_FILE = path.join(DATA_DIR, "compras_vip.json");
+const VIP_SUBSCRIPTIONS_FILE = path.join(DATA_DIR, "vip_assinaturas.json");
+const DAY_MS = 24 * 60 * 60 * 1000;
+const VIP_DURATION_DAYS = Math.max(1, Number(process.env.VIP_DURATION_DAYS || 30));
+const VIP_EXPIRY_CHECK_INTERVAL_MINUTES = Math.max(5, Number(process.env.VIP_EXPIRY_CHECK_INTERVAL_MINUTES || 60));
+const VIP_WARNING_DAYS = [5, 4, 3, 2, 1];
 
 const MP_ACCESS_TOKEN = process.env.MP_ACCESS_TOKEN || "";
 const MP_POLL_INTERVAL_SECONDS = Number(process.env.MP_POLL_INTERVAL_SECONDS || 20);
@@ -102,10 +107,14 @@ function parseOnlinePlayersFromList(output) {
     .filter(Boolean);
 }
 
+function isNickInOnlineList(players, nick) {
+  return isNickInOnlineList(players, nick);
+}
+
 async function isPlayerOnlineByList(rcon, nick) {
   const output = await rcon.send("list");
   const players = parseOnlinePlayersFromList(output);
-  return players.some((playerName) => playerName.toLowerCase() === String(nick).toLowerCase());
+  return isNickInOnlineList(players, nick);
 }
 
 function parseScoreholders(output) {
@@ -285,6 +294,7 @@ function buildVipEmbed() {
       "",
       "━━━━━━━━━━━━━━━━━━━━━━",
       "💰 **Pontos VIP:** cada R$1 aprovado adiciona 1 Ponto VIP ao seu saldo.",
+      `📅 **Duração do VIP:** ${VIP_DURATION_DAYS} dias após a entrega.`,
       "🛒 Use seus Pontos VIP em `/loja` para comprar kits.",
       "🔎 Use `/recompensa` para ver quando recebe a próxima recompensa online."
     ].join("\n"),
@@ -765,7 +775,9 @@ function buildComandosEmbed() {
       `\`${PREFIX}cancelarsorteio\``,
       `\`${PREFIX}finalizarsorteio\``,
       `\`${PREFIX}vipsetup\` — criar painel VIP`,
-      `\`${PREFIX}vipconfig\` — conferir configuração VIP/Mercado Pago`
+      `\`${PREFIX}vipconfig\` — conferir configuração VIP/Mercado Pago`,
+      `\`${PREFIX}vipativos\` — listar VIPs ativos registrados pelo bot`,
+      `\`${PREFIX}vipcheck\` — forçar verificação de avisos/vencimentos VIP`
     ].join("\n"),
     0x8a2be2
   );
@@ -798,6 +810,243 @@ function updateCompraVip(updatedCompra) {
   if (index >= 0) compras[index] = updatedCompra;
   else compras.push(updatedCompra);
   saveComprasVip(compras);
+}
+
+function loadVipSubscriptions() {
+  ensureDataDir();
+
+  if (!fs.existsSync(VIP_SUBSCRIPTIONS_FILE)) {
+    saveVipSubscriptions([]);
+    return [];
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(VIP_SUBSCRIPTIONS_FILE, "utf8"));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    saveVipSubscriptions([]);
+    return [];
+  }
+}
+
+function saveVipSubscriptions(subscriptions) {
+  ensureDataDir();
+  fs.writeFileSync(VIP_SUBSCRIPTIONS_FILE, JSON.stringify(subscriptions, null, 2), "utf8");
+}
+
+function formatDateTimeBR(dateLike) {
+  const date = new Date(dateLike);
+  if (Number.isNaN(date.getTime())) return "data inválida";
+  return date.toLocaleString("pt-BR", { timeZone: "America/Campo_Grande" });
+}
+
+function getVipRankList() {
+  return vipRanges.map((vip) => vip.rank).filter(Boolean);
+}
+
+function getActiveVipSubscriptionForNick(subscriptions, nick) {
+  const normalizedNick = String(nick || "").toLowerCase();
+  const now = Date.now();
+
+  return subscriptions
+    .filter((sub) =>
+      String(sub.nick || "").toLowerCase() === normalizedNick &&
+      sub.status === "active" &&
+      new Date(sub.expiresAt).getTime() > now
+    )
+    .sort((a, b) => new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime())[0] || null;
+}
+
+function upsertVipSubscription(compra, nick) {
+  const subscriptions = loadVipSubscriptions();
+  const now = new Date();
+  const existing = getActiveVipSubscriptionForNick(subscriptions, nick);
+  const startDate = existing ? new Date(existing.expiresAt) : now;
+  const expiresAt = new Date(startDate.getTime() + VIP_DURATION_DAYS * DAY_MS);
+  const vip = compra.vip;
+
+  if (existing) {
+    existing.vipKey = vip.key;
+    existing.vipName = vip.name;
+    existing.rank = vip.rank;
+    existing.points = Number(existing.points || 0) + Number(compra.points || 0);
+    existing.lastPurchaseId = compra.id;
+    existing.purchaseIds = Array.isArray(existing.purchaseIds) ? existing.purchaseIds : [];
+    if (!existing.purchaseIds.includes(compra.id)) existing.purchaseIds.push(compra.id);
+    existing.amount = Number(existing.amount || 0) + Number(compra.amount || 0);
+    existing.expiresAt = expiresAt.toISOString();
+    existing.status = "active";
+    existing.warningDaysSent = [];
+    existing.updatedAt = now.toISOString();
+    saveVipSubscriptions(subscriptions);
+    return existing;
+  }
+
+  const subscription = {
+    id: `sub_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`,
+    purchaseIds: [compra.id],
+    lastPurchaseId: compra.id,
+    discordUserId: compra.discordUserId || null,
+    discordTag: compra.discordTag || null,
+    nick,
+    vipKey: vip.key,
+    vipName: vip.name,
+    rank: vip.rank,
+    amount: Number(compra.amount || 0),
+    points: Number(compra.points || 0),
+    startedAt: now.toISOString(),
+    expiresAt: expiresAt.toISOString(),
+    status: "active",
+    warningDaysSent: [],
+    createdAt: now.toISOString(),
+    updatedAt: now.toISOString()
+  };
+
+  subscriptions.push(subscription);
+  saveVipSubscriptions(subscriptions);
+  return subscription;
+}
+
+function buildTellrawComponents(text, color = "yellow") {
+  return [
+    { text: "✦ ", color: "gold", bold: true },
+    { text, color }
+  ];
+}
+
+async function sendTellrawToPlayer(rcon, nick, text, color = "yellow") {
+  await rcon.send(`tellraw ${nick} ${JSON.stringify(buildTellrawComponents(text, color))}`);
+}
+
+function subscriptionRemainingDay(expiresAt) {
+  const remainingMs = new Date(expiresAt).getTime() - Date.now();
+  if (remainingMs <= 0) return 0;
+  return Math.ceil(remainingMs / DAY_MS);
+}
+
+async function expireVipSubscription(rcon, subscription, onlinePlayers) {
+  await rcon.send(`ftbranks remove ${subscription.nick} ${subscription.rank}`);
+
+  subscription.status = "expired";
+  subscription.expiredAt = new Date().toISOString();
+  subscription.removedAt = new Date().toISOString();
+  subscription.updatedAt = new Date().toISOString();
+
+  if (isNickInOnlineList(onlinePlayers, subscription.nick)) {
+    await sendTellrawToPlayer(
+      rcon,
+      subscription.nick,
+      `Seu ${subscription.vipName} venceu e foi removido. Renove pelo Discord para recuperar os benefícios.`,
+      "red"
+    ).catch(() => {});
+  }
+
+  await notifyVipLog(null, `⛔ VIP expirado/removido: ${subscription.nick} | ${subscription.vipName} | rank ${subscription.rank}`);
+}
+
+async function warnVipSubscription(rcon, subscription, daysRemaining) {
+  await sendTellrawToPlayer(
+    rcon,
+    subscription.nick,
+    `Seu ${subscription.vipName} vence em ${daysRemaining} dia${daysRemaining === 1 ? "" : "s"}. Renove pelo Discord para não perder os benefícios.`,
+    "yellow"
+  );
+
+  subscription.warningDaysSent = Array.isArray(subscription.warningDaysSent) ? subscription.warningDaysSent : [];
+  subscription.warningDaysSent.push(daysRemaining);
+  subscription.updatedAt = new Date().toISOString();
+}
+
+async function checkVipSubscriptions() {
+  const subscriptions = loadVipSubscriptions();
+  const active = subscriptions.filter((sub) => sub.status === "active");
+
+  if (!active.length) return;
+
+  let changed = false;
+
+  await withRcon(async (rcon) => {
+    const onlinePlayers = parseOnlinePlayersFromList(await rcon.send("list"));
+
+    for (const subscription of active) {
+      const expiresAtMs = new Date(subscription.expiresAt).getTime();
+
+      if (!Number.isFinite(expiresAtMs)) {
+        subscription.status = "invalid";
+        subscription.lastError = "expiresAt inválido";
+        subscription.updatedAt = new Date().toISOString();
+        changed = true;
+        continue;
+      }
+
+      if (Date.now() >= expiresAtMs) {
+        try {
+          await expireVipSubscription(rcon, subscription, onlinePlayers);
+          changed = true;
+        } catch (error) {
+          subscription.lastExpiryError = String(error?.message || error);
+          subscription.updatedAt = new Date().toISOString();
+          changed = true;
+          console.error(`Erro ao remover VIP expirado de ${subscription.nick}:`, error.message || error);
+        }
+        continue;
+      }
+
+      const daysRemaining = subscriptionRemainingDay(subscription.expiresAt);
+      subscription.warningDaysSent = Array.isArray(subscription.warningDaysSent) ? subscription.warningDaysSent : [];
+
+      if (VIP_WARNING_DAYS.includes(daysRemaining) && !subscription.warningDaysSent.includes(daysRemaining)) {
+        if (!isNickInOnlineList(onlinePlayers, subscription.nick)) {
+          continue;
+        }
+
+        try {
+          await warnVipSubscription(rcon, subscription, daysRemaining);
+          changed = true;
+        } catch (error) {
+          subscription.lastWarningError = String(error?.message || error);
+          subscription.updatedAt = new Date().toISOString();
+          changed = true;
+          console.warn(`Não consegui avisar ${subscription.nick} sobre vencimento VIP:`, error.message || error);
+        }
+      }
+    }
+  });
+
+  if (changed) {
+    saveVipSubscriptions(subscriptions);
+  }
+}
+
+let vipExpiryMonitorStarted = false;
+
+function startVipExpiryMonitor() {
+  if (vipExpiryMonitorStarted) return;
+  vipExpiryMonitorStarted = true;
+
+  const intervalMs = VIP_EXPIRY_CHECK_INTERVAL_MINUTES * 60 * 1000;
+
+  setTimeout(() => {
+    checkVipSubscriptions().catch((error) => console.error("Erro na verificação de vencimento VIP:", error));
+  }, 15 * 1000);
+
+  setInterval(() => {
+    checkVipSubscriptions().catch((error) => console.error("Erro na verificação de vencimento VIP:", error));
+  }, intervalMs);
+
+  console.log(`Verificador de vencimento VIP ativo a cada ${VIP_EXPIRY_CHECK_INTERVAL_MINUTES}min; duração padrão: ${VIP_DURATION_DAYS} dias`);
+}
+
+function buildVipActiveListText() {
+  const active = loadVipSubscriptions()
+    .filter((sub) => sub.status === "active")
+    .sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
+
+  if (!active.length) return "Nenhum VIP ativo registrado pelo bot.";
+
+  return active.slice(0, 20).map((sub, index) => {
+    return `${index + 1}. ${sub.nick} — ${sub.vipName} — vence em ${subscriptionRemainingDay(sub.expiresAt)} dia(s) — ${formatDateTimeBR(sub.expiresAt)}`;
+  }).join("\n");
 }
 
 function generateCompraVipId() {
@@ -852,6 +1101,7 @@ function createVipPanelEmbed() {
       "💰 **Cada R$1 aprovado = 1 Ponto VIP.**",
       "🛒 Os Pontos VIP podem ser usados no jogo com `/loja`.",
       "⏰ Use `/recompensa` no jogo para ver sua próxima recompensa online.",
+      `✅ O VIP fica ativo por **${VIP_DURATION_DAYS} dias** após a entrega.`,
       "✅ Após o pagamento aprovado, envie seu nick exato do Minecraft e o bot aplica seu VIP automaticamente.",
       "🗑️ Quando a compra terminar, o ticket poderá ser fechado pelo botão."
     ].join("\n"),
@@ -903,6 +1153,7 @@ function createVipTicketIntroEmbed(user, vip, amount) {
       `• Valor escolhido: **${formatMoney(amount)}**`,
       `• Pontos VIP: **${Math.floor(amount)}**`,
       `• Recompensa online: **${vip.rewardText}**`,
+      `• Duração do VIP: **${VIP_DURATION_DAYS} dias**`,
       "",
       "⏳ Aguarde um instante enquanto gero o Pix / QR Code do Mercado Pago..."
     ].join("\n"),
@@ -919,6 +1170,7 @@ function createVipPixGeneratedEmbed(vip, amount, qrCode) {
       `**VIP:** ${vip.name}`,
       `**Valor:** ${formatMoney(amount)}`,
       `**Pontos VIP:** ${Math.floor(amount)}`,
+      `**Duração do VIP:** ${VIP_DURATION_DAYS} dias`,
       "",
       "📷 Escaneie o QR Code abaixo ou use o Pix copia e cola.",
       "",
@@ -939,6 +1191,7 @@ function createVipApprovedEmbed(compra) {
       `**VIP:** ${compra.vip.name}`,
       `**Valor pago:** ${formatMoney(compra.amount)}`,
       `**Pontos VIP:** ${compra.points}`,
+      `**Duração do VIP:** ${VIP_DURATION_DAYS} dias após a entrega`,
       "",
       "Agora envie seu nick exato do Minecraft usando:",
       `\`${PREFIX}nick SeuNick\``,
@@ -960,6 +1213,7 @@ function createVipDeliveredEmbed(compra, nick) {
       `**VIP:** ${compra.vip.name}`,
       `**Pontos VIP adicionados:** ${compra.points}`,
       `**Recompensa online:** ${compra.vip.rewardText}`,
+      compra.vipExpiresAt ? `**VIP ativo até:** ${formatDateTimeBR(compra.vipExpiresAt)}` : `**Duração do VIP:** ${VIP_DURATION_DAYS} dias`,
       "",
       "Dentro do jogo, use `/loja` para gastar seus Pontos VIP e `/recompensa` para ver sua próxima recompensa online.",
       "",
@@ -983,7 +1237,7 @@ function createVipNeedsOnlineEmbed(compra, nick) {
       "Entre no servidor com esse nick e envie novamente:",
       `\`${PREFIX}nick ${nick}\``,
       "",
-      "Assim o bot aplica o rank pelo FTB Ranks e adiciona os Pontos VIP pelo comando oficial da loja."
+      `Assim o bot aplica o rank por ${VIP_DURATION_DAYS} dias pelo FTB Ranks e adiciona os Pontos VIP pelo comando oficial da loja.`
     ].join("\n"),
     0xfee75c
   );
@@ -1267,6 +1521,12 @@ async function applyVipToMinecraft(compra, nick) {
       throw error;
     }
 
+    // Remove somente ranks VIP antigos para evitar acumular VIP Ferro/Ouro/Diamante/Netherita no mesmo player.
+    // Não mexe em rank de Staff/Admin, porque esses ranks não estão na lista vipRanges.
+    for (const rank of getVipRankList().filter((rank) => rank !== vip.rank)) {
+      await rcon.send(`ftbranks remove ${nick} ${rank}`).catch(() => {});
+    }
+
     const commands = [
       // FTB Ranks já controla o rank, prefixo, permissões, tags/nodes e recompensa online.
       `ftbranks add ${nick} ${vip.rank}`,
@@ -1279,10 +1539,12 @@ async function applyVipToMinecraft(compra, nick) {
       const result = await rcon.send(command);
       results.push({ command, result });
     }
-    return results;
+
+    const subscription = upsertVipSubscription({ ...compra, points }, nick);
+    results.push({ command: "vip_subscription", result: subscription.expiresAt });
+    return { results, subscription };
   });
 }
-
 async function startVipPurchaseFromModal(interaction, vip, amount) {
   const detectedVip = getVipByAmount(amount);
   if (!detectedVip || detectedVip.key !== vip.key) {
@@ -1383,14 +1645,16 @@ async function setNickForApprovedVipPurchase(message, nick) {
   updateCompraVip(compra);
   await message.reply({ embeds: [baseEmbed("⏳ Aplicando VIP", "Pagamento aprovado. Estou aplicando seu VIP no servidor agora.", 0xfee75c)] });
   try {
-    await applyVipToMinecraft(compra, nick);
+    const delivery = await applyVipToMinecraft(compra, nick);
     compra.status = "vip_entregue";
+    compra.vipStartedAt = delivery.subscription.startedAt || new Date().toISOString();
+    compra.vipExpiresAt = delivery.subscription.expiresAt;
     compra.updatedAt = new Date().toISOString();
     updateCompraVip(compra);
     await message.reply({ embeds: [createVipDeliveredEmbed(compra, nick)] });
     const channel = await client.channels.fetch(compra.channelId).catch(() => null);
     if (channel) await offerCloseTicket(channel, compra, "success");
-    await notifyVipLog(compra, `🎉 VIP entregue: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos`);
+    await notifyVipLog(compra, `🎉 VIP entregue: ${nick} | ${compra.vip.name} | ${formatMoney(compra.amount)} | ${compra.points} pontos | expira em ${formatDateTimeBR(compra.vipExpiresAt)}`);
   } catch (error) {
     console.error(error);
     if (error?.code === "PLAYER_OFFLINE_FOR_VIP_DELIVERY") {
@@ -1419,6 +1683,7 @@ const client = new Client({
 
 client.once("clientReady", () => {
   startMercadoPagoPolling();
+  startVipExpiryMonitor();
   console.log(`Bot online como ${client.user.tag}`);
   client.user.setActivity("ATM 11 | !loja • !vip");
 
@@ -1795,6 +2060,37 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
+  if (content === `${PREFIX}vipativos`) {
+    if (!canManageVip(message)) {
+      await message.reply("❌ Você não tem permissão para ver os VIPs ativos.");
+      return;
+    }
+
+    await message.reply([
+      "📅 **VIPs ativos registrados pelo bot**",
+      "",
+      buildVipActiveListText()
+    ].join("\n"));
+    return;
+  }
+
+  if (content === `${PREFIX}vipcheck`) {
+    if (!canManageVip(message)) {
+      await message.reply("❌ Você não tem permissão para verificar vencimentos VIP.");
+      return;
+    }
+
+    await message.reply("🔎 Verificando avisos e vencimentos VIP agora...");
+    try {
+      await checkVipSubscriptions();
+      await message.reply("✅ Verificação de VIP concluída.");
+    } catch (error) {
+      console.error("Erro no vipcheck:", error);
+      await message.reply("❌ Erro ao verificar vencimentos VIP. Veja o log do bot.");
+    }
+    return;
+  }
+
   if (content === `${PREFIX}vipconfig`) {
     if (!canManageVip(message)) {
       await message.reply("❌ Você não tem permissão para ver a configuração VIP.");
@@ -1816,7 +2112,10 @@ client.on("messageCreate", async (message) => {
       `VIP_LOG_CHANNEL_ID: ${VIP_LOG_CHANNEL_ID ? "✅ configurado" : "⚠️ não configurado"}`,
       `Verificação automática: ✅ ativa a cada ${MP_POLL_INTERVAL_SECONDS}s`,
       `Entrega Minecraft: FTB Ranks + /darpontosvip, sem tag antigo e sem scoreboard direto`,
-      `Jogador online para entrega: ✅ necessário na versão atual`,
+      `Jogador online para entrega: ✅ necessário para aplicar Pontos VIP via /darpontosvip`,
+      `Duração do VIP: ${VIP_DURATION_DAYS} dias`,
+      `Verificador de vencimento: ✅ ativo a cada ${VIP_EXPIRY_CHECK_INTERVAL_MINUTES}min`,
+      `Avisos automáticos: faltando ${VIP_WARNING_DAYS.join(", ")} dia(s)`,
       "",
       "Obs: mesmo sem webhook configurado, o bot tenta confirmar pagamentos pela API automaticamente."
     ].join("\n"));
